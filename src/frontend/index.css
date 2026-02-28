@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* JMD FinCap Design System — Navy Blue + Gold */
+/* Fonts loaded via Google Fonts in index.html */
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Navy Blue primary — oklch(0.22 0.06 250) ≈ #0D1B3E */
+    --navy-900: 0.18 0.065 252;
+    --navy-800: 0.22 0.06 252;
+    --navy-700: 0.28 0.055 252;
+    --navy-600: 0.35 0.05 252;
+    --navy-100: 0.93 0.01 252;
+    --navy-50: 0.97 0.005 252;
+
+    /* Gold accent — oklch(0.68 0.12 72) ≈ #C9A84C */
+    --gold-600: 0.62 0.115 72;
+    --gold-500: 0.70 0.13 72;
+    --gold-400: 0.78 0.12 72;
+    --gold-100: 0.93 0.03 72;
+
+    /* Base tokens mapped to JMD palette */
+    --background: 0.97 0.005 252;
+    --foreground: 0.18 0.065 252;
+    --card: 1 0 0;
+    --card-foreground: 0.18 0.065 252;
+    --popover: 1 0 0;
+    --popover-foreground: 0.18 0.065 252;
+    --primary: 0.22 0.06 252;
+    --primary-foreground: 0.985 0 0;
+    --secondary: 0.93 0.01 252;
+    --secondary-foreground: 0.22 0.06 252;
+    --muted: 0.95 0.008 252;
+    --muted-foreground: 0.45 0.03 252;
+    --accent: 0.70 0.13 72;
+    --accent-foreground: 0.18 0.065 252;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+    --border: 0.88 0.015 252;
+    --input: 0.88 0.015 252;
+    --ring: 0.70 0.13 72;
+
+    --chart-1: 0.646 0.222 41.116;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+    --sidebar: 0.985 0 0;
+    --sidebar-foreground: 0.18 0.065 252;
+    --sidebar-primary: 0.22 0.06 252;
+    --sidebar-primary-foreground: 0.985 0 0;
+    --sidebar-accent: 0.93 0.01 252;
+    --sidebar-accent-foreground: 0.22 0.06 252;
+    --sidebar-border: 0.88 0.015 252;
+    --sidebar-ring: 0.70 0.13 72;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  .font-display {
+    font-family: 'Playfair Display', serif;
+  }
+
+  .font-body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .text-gold {
+    color: oklch(var(--gold-500));
+  }
+
+  .text-navy {
+    color: oklch(var(--navy-800));
+  }
+
+  .bg-navy {
+    background-color: oklch(var(--navy-800));
+  }
+
+  .bg-navy-900 {
+    background-color: oklch(var(--navy-900));
+  }
+
+  .bg-navy-700 {
+    background-color: oklch(var(--navy-700));
+  }
+
+  .bg-gold {
+    background-color: oklch(var(--gold-500));
+  }
+
+  .border-gold {
+    border-color: oklch(var(--gold-500));
+  }
+
+  .hover\:bg-gold:hover {
+    background-color: oklch(var(--gold-500));
+  }
+
+  .section-fade {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .section-fade.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(var(--navy-100));
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--gold-500));
+  border-radius: 3px;
+}
+
+/* Chat widget scrollbar */
+.chat-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: oklch(var(--gold-500) / 0.4);
+  border-radius: 2px;
+}
+
+/* Typing dots animation */
+@keyframes typing-dot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.typing-dot:nth-child(1) { animation: typing-dot 1.2s infinite 0s; }
+.typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 0.2s; }
+.typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 0.4s; }
+
+/* Gold shimmer on headings */
+.gold-underline {
+  position: relative;
+}
+
+.gold-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 60px;
+  height: 3px;
+  background: oklch(var(--gold-500));
+  border-radius: 2px;
+}
+
+.gold-underline-center::after {
+  left: 50%;
+  transform: translateX(-50%);
+}
