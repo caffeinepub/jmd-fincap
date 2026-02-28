@@ -14,6 +14,26 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const Time = IDL.Int;
+export const LoanApplication = IDL.Record({
+  'photoFile' : IDL.Text,
+  'aadharCardFile' : IDL.Text,
+  'employeeType' : IDL.Text,
+  'loanAmount' : IDL.Text,
+  'dateOfBirth' : IDL.Text,
+  'motherName' : IDL.Text,
+  'loanType' : IDL.Text,
+  'signatureFile' : IDL.Text,
+  'aadharNumber' : IDL.Text,
+  'fatherName' : IDL.Text,
+  'timestamp' : Time,
+  'panNumber' : IDL.Text,
+  'tenure' : IDL.Text,
+  'lastName' : IDL.Text,
+  'panCardFile' : IDL.Text,
+  'loanPurpose' : IDL.Text,
+  'monthlyIncome' : IDL.Text,
+  'firstName' : IDL.Text,
+});
 export const ContactFormSubmission = IDL.Record({
   'name' : IDL.Text,
   'email' : IDL.Text,
@@ -26,9 +46,16 @@ export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'adminLogin' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+  'adminLogout' : IDL.Func([IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'getAllLoanApplications' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(LoanApplication)],
+      ['query'],
+    ),
   'getAllSubmissions' : IDL.Func(
-      [],
+      [IDL.Text],
       [IDL.Vec(ContactFormSubmission)],
       ['query'],
     ),
@@ -41,11 +68,36 @@ export const idlService = IDL.Service({
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'setAdminPassword' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   'submitContactForm' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
       [],
     ),
+  'submitLoanApplication' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [],
+      [],
+    ),
+  'validateAdminSession' : IDL.Func([IDL.Text], [IDL.Bool], []),
 });
 
 export const idlInitArgs = [];
@@ -57,6 +109,26 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const Time = IDL.Int;
+  const LoanApplication = IDL.Record({
+    'photoFile' : IDL.Text,
+    'aadharCardFile' : IDL.Text,
+    'employeeType' : IDL.Text,
+    'loanAmount' : IDL.Text,
+    'dateOfBirth' : IDL.Text,
+    'motherName' : IDL.Text,
+    'loanType' : IDL.Text,
+    'signatureFile' : IDL.Text,
+    'aadharNumber' : IDL.Text,
+    'fatherName' : IDL.Text,
+    'timestamp' : Time,
+    'panNumber' : IDL.Text,
+    'tenure' : IDL.Text,
+    'lastName' : IDL.Text,
+    'panCardFile' : IDL.Text,
+    'loanPurpose' : IDL.Text,
+    'monthlyIncome' : IDL.Text,
+    'firstName' : IDL.Text,
+  });
   const ContactFormSubmission = IDL.Record({
     'name' : IDL.Text,
     'email' : IDL.Text,
@@ -69,9 +141,16 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'adminLogin' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+    'adminLogout' : IDL.Func([IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'getAllLoanApplications' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(LoanApplication)],
+        ['query'],
+      ),
     'getAllSubmissions' : IDL.Func(
-        [],
+        [IDL.Text],
         [IDL.Vec(ContactFormSubmission)],
         ['query'],
       ),
@@ -84,11 +163,36 @@ export const idlFactory = ({ IDL }) => {
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'setAdminPassword' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'submitContactForm' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
         [],
       ),
+    'submitLoanApplication' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [],
+        [],
+      ),
+    'validateAdminSession' : IDL.Func([IDL.Text], [IDL.Bool], []),
   });
 };
 

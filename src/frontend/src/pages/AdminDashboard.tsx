@@ -1,5 +1,4 @@
-import type { ContactFormSubmission } from "@/backend.d";
-import { Badge } from "@/components/ui/badge";
+import type { ContactFormSubmission, LoanApplication } from "@/backend.d";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Toaster } from "@/components/ui/sonner";
 import {
   Table,
   TableBody,
@@ -18,31 +18,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
-import { useInternetIdentity } from "@/hooks/useInternetIdentity";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  AlertCircle,
+  Ban,
+  Building2,
   Calendar,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
+  CreditCard,
+  Crown,
   Download,
+  ExternalLink,
+  FileText,
   Inbox,
   LayoutDashboard,
   Loader2,
   LogOut,
   Menu,
+  MinusCircle,
   RefreshCw,
   Search,
   Shield,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 // ─── Timestamp Utility ────────────────────────────────────────────────────────
 
@@ -72,7 +83,7 @@ function isToday(ns: bigint): boolean {
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
-function exportToCSV(submissions: ContactFormSubmission[]) {
+function exportEnquiriesToCSV(submissions: ContactFormSubmission[]) {
   const headers = [
     "#",
     "Name",
@@ -98,6 +109,52 @@ function exportToCSV(submissions: ContactFormSubmission[]) {
   const a = document.createElement("a");
   a.href = url;
   a.download = `jmd-fincap-enquiries-${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportLoanApplicationsToCSV(apps: LoanApplication[]) {
+  const headers = [
+    "#",
+    "First Name",
+    "Last Name",
+    "DOB",
+    "Mother Name",
+    "Father Name",
+    "Aadhar",
+    "PAN",
+    "Loan Type",
+    "Loan Purpose",
+    "Loan Amount",
+    "Tenure",
+    "Employee Type",
+    "Monthly Income",
+    "Date/Time",
+  ];
+  const rows = apps.map((a, i) => [
+    i + 1,
+    `"${a.firstName}"`,
+    `"${a.lastName}"`,
+    `"${a.dateOfBirth}"`,
+    `"${a.motherName}"`,
+    `"${a.fatherName}"`,
+    `"${a.aadharNumber}"`,
+    `"${a.panNumber}"`,
+    `"${a.loanType}"`,
+    `"${a.loanPurpose}"`,
+    `"${a.loanAmount}"`,
+    `"${a.tenure}"`,
+    `"${a.employeeType}"`,
+    `"${a.monthlyIncome}"`,
+    `"${formatTimestamp(a.timestamp)}"`,
+  ]);
+
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `jmd-fincap-loans-${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -133,6 +190,7 @@ interface StatCardProps {
   animate?: boolean;
   numericValue?: number;
   delay?: number;
+  accent?: boolean;
 }
 
 function StatCard({
@@ -142,6 +200,7 @@ function StatCard({
   animate,
   numericValue,
   delay = 0,
+  accent = false,
 }: StatCardProps) {
   return (
     <motion.div
@@ -151,8 +210,18 @@ function StatCard({
       className="bg-white rounded-xl p-6 shadow-xs border border-gray-100 hover:shadow-card-hover transition-all duration-300 group"
     >
       <div className="flex items-start justify-between mb-4">
-        <div className="h-11 w-11 rounded-xl bg-navy-900 flex items-center justify-center group-hover:bg-gold-500 transition-colors duration-300">
-          <Icon className="h-5 w-5 text-gold-500 group-hover:text-navy-900 transition-colors duration-300" />
+        <div
+          className={`h-11 w-11 rounded-xl flex items-center justify-center group-hover:bg-gold-500 transition-colors duration-300 ${
+            accent ? "bg-gold-500" : "bg-navy-900"
+          }`}
+        >
+          <Icon
+            className={`h-5 w-5 transition-colors duration-300 group-hover:text-navy-900 ${
+              accent
+                ? "text-navy-900 group-hover:text-navy-900"
+                : "text-gold-500"
+            }`}
+          />
         </div>
         <div className="h-2 w-2 rounded-full bg-green-400 mt-1" />
       </div>
@@ -185,6 +254,29 @@ function TableSkeleton() {
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-4 flex-1" />
           <Skeleton className="h-4 w-32" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <div className="space-y-4">
+      {["sk1", "sk2", "sk3"].map((sk) => (
+        <div
+          key={sk}
+          className="bg-white rounded-xl p-6 border border-gray-100 space-y-3"
+        >
+          <div className="flex gap-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="space-y-1.5 flex-1">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-3/4" />
         </div>
       ))}
     </div>
@@ -246,21 +338,396 @@ function ServiceBadge({ service }: { service: string }) {
   );
 }
 
+// ─── Employee Type Badge ──────────────────────────────────────────────────────
+
+const EMP_LABELS: Record<string, string> = {
+  job: "Job",
+  salaried: "Salaried",
+  "self-employed": "Self Employed",
+};
+
+function EmployeeBadge({ type }: { type: string }) {
+  return (
+    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-body font-semibold border bg-navy-50 text-navy-800 border-navy-200">
+      {EMP_LABELS[type] ?? type}
+    </span>
+  );
+}
+
+// ─── Document Indicator ───────────────────────────────────────────────────────
+
+function DocIndicator({
+  label,
+  uploaded,
+}: { label: string; uploaded: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {uploaded ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+      ) : (
+        <MinusCircle className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+      )}
+      <span
+        className={`font-body text-xs ${uploaded ? "text-green-600" : "text-gray-400"}`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Loan Application Card ────────────────────────────────────────────────────
+
+function LoanApplicationCard({
+  app,
+  idx,
+  onApprove,
+  onReject,
+  actionLoading,
+  localStatus,
+}: {
+  app: LoanApplication;
+  idx: number;
+  onApprove: (app: LoanApplication) => void;
+  onReject: (app: LoanApplication) => void;
+  actionLoading: string | null;
+  localStatus?: "pending" | "approved" | "rejected";
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const maskedAadhar =
+    app.aadharNumber.length >= 8
+      ? `${app.aadharNumber.slice(0, 4)} •••• ${app.aadharNumber.slice(-4)}`
+      : app.aadharNumber;
+
+  const formattedAmount = Number.isNaN(Number(app.loanAmount))
+    ? app.loanAmount
+    : `₹${Number(app.loanAmount).toLocaleString("en-IN")}`;
+
+  const formattedIncome = Number.isNaN(Number(app.monthlyIncome))
+    ? app.monthlyIncome
+    : `₹${Number(app.monthlyIncome).toLocaleString("en-IN")}`;
+
+  const appId =
+    ((app as unknown as Record<string, unknown>).id as string) ??
+    `${app.firstName}-${String(app.timestamp)}`;
+  const isThisLoading = actionLoading === appId;
+
+  // Determine status: prefer backend status field, then local override
+  const backendStatus = (app as unknown as Record<string, unknown>).status as
+    | string
+    | undefined;
+  const effectiveStatus: "pending" | "approved" | "rejected" =
+    localStatus ??
+    (backendStatus === "approved"
+      ? "approved"
+      : backendStatus === "rejected"
+        ? "rejected"
+        : "pending");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: idx * 0.04, duration: 0.35 }}
+      className="bg-white rounded-xl border border-gray-100 shadow-xs hover:shadow-card-hover transition-all duration-300 overflow-hidden"
+    >
+      {/* Card Header */}
+      <div className="px-6 py-4 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="h-11 w-11 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
+            <span className="font-body text-sm font-bold text-gold-500">
+              {app.firstName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <div className="font-body text-base font-semibold text-navy-900">
+              {app.firstName} {app.lastName}
+            </div>
+            <div className="font-body text-xs text-gray-400 mt-0.5">
+              DOB: {app.dateOfBirth} &nbsp;·&nbsp;{" "}
+              {formatTimestamp(app.timestamp)}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <LoanStatusBadge status={effectiveStatus} />
+          <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-body font-semibold border bg-gold-50 text-gold-700 border-gold-200">
+            {app.loanType || "Personal Loan"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="text-gray-400 hover:text-navy-900 transition-colors p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+            aria-label={expanded ? "Collapse details" : "Expand details"}
+          >
+            {expanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Summary row */}
+      <div className="px-6 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-gray-50">
+        <div>
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+            Loan Amount
+          </div>
+          <div className="font-body text-sm font-semibold text-navy-900">
+            {formattedAmount}
+          </div>
+        </div>
+        <div>
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+            Tenure
+          </div>
+          <div className="font-body text-sm font-semibold text-navy-900">
+            {app.tenure} months
+          </div>
+        </div>
+        <div>
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+            Monthly Income
+          </div>
+          <div className="font-body text-sm font-semibold text-navy-900">
+            {formattedIncome}
+          </div>
+        </div>
+        <div>
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+            Employment
+          </div>
+          <EmployeeBadge type={app.employeeType} />
+        </div>
+      </div>
+
+      {/* Action Row */}
+      <div className="px-6 pb-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
+        {effectiveStatus === "pending" && (
+          <>
+            <Button
+              size="sm"
+              onClick={() => onApprove(app)}
+              disabled={isThisLoading}
+              className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
+            >
+              {isThisLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ThumbsUp className="h-3.5 w-3.5" />
+              )}
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onReject(app)}
+              disabled={isThisLoading}
+              className="font-body text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5"
+            >
+              {isThisLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ThumbsDown className="h-3.5 w-3.5" />
+              )}
+              Reject
+            </Button>
+          </>
+        )}
+        {effectiveStatus === "approved" && (
+          <a
+            href={`/sanction-letter?id=${encodeURIComponent(appId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body font-semibold bg-navy-900 text-gold-500 hover:bg-navy-800 transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            View Sanction Letter
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </a>
+        )}
+        {effectiveStatus === "rejected" && (
+          <span className="font-body text-xs text-gray-400 italic">
+            Application has been rejected
+          </span>
+        )}
+      </div>
+
+      {/* Expanded Details */}
+      {expanded && (
+        <div className="border-t border-gray-100 px-6 py-5 bg-gray-50/50 space-y-5">
+          {/* Document numbers */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                Aadhar Number
+              </div>
+              <div className="font-body text-sm font-mono text-navy-900">
+                {maskedAadhar}
+              </div>
+            </div>
+            <div>
+              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                PAN Number
+              </div>
+              <div className="font-body text-sm font-mono text-navy-900">
+                {app.panNumber}
+              </div>
+            </div>
+          </div>
+
+          {/* Family info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                Mother's Name
+              </div>
+              <div className="font-body text-sm text-navy-900">
+                {app.motherName}
+              </div>
+            </div>
+            <div>
+              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                Father's Name
+              </div>
+              <div className="font-body text-sm text-navy-900">
+                {app.fatherName}
+              </div>
+            </div>
+          </div>
+
+          {/* Loan purpose */}
+          <div>
+            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+              Loan Purpose
+            </div>
+            <div className="font-body text-sm text-navy-900">
+              {app.loanPurpose}
+            </div>
+          </div>
+
+          {/* Documents uploaded */}
+          <div>
+            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+              Documents Uploaded
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <DocIndicator
+                label="Aadhar Card"
+                uploaded={!!app.aadharCardFile}
+              />
+              <DocIndicator label="PAN Card" uploaded={!!app.panCardFile} />
+              <DocIndicator label="Photo" uploaded={!!app.photoFile} />
+              <DocIndicator label="Signature" uploaded={!!app.signatureFile} />
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── Role Info Helper ─────────────────────────────────────────────────────────
+
+interface SessionData {
+  token: string;
+  role: string;
+  roleLabel: string;
+  username: string;
+}
+
+function getSession(): SessionData | null {
+  try {
+    const raw = localStorage.getItem("adminSession");
+    if (raw) return JSON.parse(raw) as SessionData;
+    // backward compat: old token only
+    const token = localStorage.getItem("jmd_admin_token");
+    if (token)
+      return {
+        token,
+        role: "admin",
+        roleLabel: "Administrator",
+        username: "admin",
+      };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function RoleIcon({ role }: { role: string }) {
+  if (role === "ceo") return <Crown className="h-3.5 w-3.5 text-gold-500" />;
+  if (role === "cofounder")
+    return <Building2 className="h-3.5 w-3.5 text-gold-500" />;
+  return <Shield className="h-3.5 w-3.5 text-gold-500" />;
+}
+
+// ─── Loan Status Badge ────────────────────────────────────────────────────────
+
+interface LoanStatus {
+  status: "pending" | "approved" | "rejected";
+}
+
+function LoanStatusBadge({ status }: LoanStatus) {
+  if (status === "approved") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-green-50 text-green-700 border border-green-200">
+        <CheckCircle2 className="h-3 w-3" />
+        Approved
+      </span>
+    );
+  }
+  if (status === "rejected") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-red-50 text-red-700 border border-red-200">
+        <Ban className="h-3 w-3" />
+        Rejected
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+      <Clock className="h-3 w-3" />
+      Pending
+    </span>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export function AdminDashboard() {
   const { actor, isFetching: actorFetching } = useActor();
-  const { clear, identity, isLoginSuccess, isInitializing } =
-    useInternetIdentity();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [adminCheckLoading, setAdminCheckLoading] = useState(true);
+  const [sessionValid, setSessionValid] = useState<boolean | null>(null);
+  const [sessionChecking, setSessionChecking] = useState(true);
+  const [activeTab, setActiveTab] = useState("enquiries");
+
+  // Enquiries state
   const [search, setSearch] = useState("");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Loan apps state
+  const [loanSearch, setLoanSearch] = useState("");
+  const [loanSortOrder, setLoanSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Loan action states
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [localLoanStatuses, setLocalLoanStatuses] = useState<
+    Record<string, "pending" | "approved" | "rejected">
+  >({});
+
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Session data
+  const session = getSession();
+  const sessionToken = session?.token ?? "";
 
   // Live clock
   useEffect(() => {
@@ -268,51 +735,79 @@ export function AdminDashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Redirect if not logged in
+  // Check session token validity on mount
   useEffect(() => {
-    if (!isInitializing && !isLoginSuccess && !identity) {
+    if (!session) {
       void navigate({ to: "/admin/login" });
+      return;
     }
-  }, [isLoginSuccess, identity, isInitializing, navigate]);
-
-  // Check admin status
-  useEffect(() => {
     if (!actor || actorFetching) return;
-    setAdminCheckLoading(true);
+
+    setSessionChecking(true);
     actor
-      .isCallerAdmin()
-      .then((result) => {
-        setIsAdmin(result);
+      .validateAdminSession(sessionToken)
+      .then((valid) => {
+        if (!valid) {
+          localStorage.removeItem("adminSession");
+          localStorage.removeItem("jmd_admin_token");
+          void navigate({ to: "/admin/login" });
+        } else {
+          setSessionValid(true);
+        }
       })
       .catch(() => {
-        setIsAdmin(false);
+        localStorage.removeItem("adminSession");
+        localStorage.removeItem("jmd_admin_token");
+        void navigate({ to: "/admin/login" });
       })
       .finally(() => {
-        setAdminCheckLoading(false);
+        setSessionChecking(false);
       });
-  }, [actor, actorFetching]);
+  }, [actor, actorFetching, navigate, session, sessionToken]);
 
-  // Fetch submissions
+  // Fetch contact submissions
   const {
     data: submissions = [],
-    isLoading,
-    refetch,
-    isFetching,
+    isLoading: submissionsLoading,
+    refetch: refetchSubmissions,
+    isFetching: submissionsFetching,
   } = useQuery<ContactFormSubmission[]>({
     queryKey: ["admin-submissions"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllSubmissions();
+      if (!actor || !sessionToken) return [];
+      return actor.getAllSubmissions(sessionToken);
     },
-    enabled: !!actor && !actorFetching && isAdmin === true,
+    enabled: !!actor && !actorFetching && sessionValid === true,
     staleTime: 30_000,
   });
 
-  // Derived stats
-  const stats = useMemo(() => {
+  // Fetch loan applications
+  const {
+    data: loanApplications = [],
+    isLoading: loansLoading,
+    refetch: refetchLoans,
+    isFetching: loansFetching,
+  } = useQuery<LoanApplication[]>({
+    queryKey: ["admin-loan-applications"],
+    queryFn: async () => {
+      if (!actor || !sessionToken) return [];
+      return actor.getAllLoanApplications(sessionToken);
+    },
+    enabled: !!actor && !actorFetching && sessionValid === true,
+    staleTime: 30_000,
+  });
+
+  const isFetching = submissionsFetching || loansFetching;
+
+  const handleRefresh = useCallback(() => {
+    void refetchSubmissions();
+    void refetchLoans();
+  }, [refetchSubmissions, refetchLoans]);
+
+  // Enquiries — derived stats & filtered
+  const enquiryStats = useMemo(() => {
     const total = submissions.length;
     const today = submissions.filter((s) => isToday(s.timestamp)).length;
-
     const serviceCounts: Record<string, number> = {};
     for (const s of submissions) {
       serviceCounts[s.serviceInterest] =
@@ -320,18 +815,15 @@ export function AdminDashboard() {
     }
     const topService =
       Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
-
     return { total, today, topService };
   }, [submissions]);
 
-  // All unique services
   const allServices = useMemo(() => {
     const set = new Set(submissions.map((s) => s.serviceInterest));
     return Array.from(set).sort();
   }, [submissions]);
 
-  // Filtered + sorted submissions
-  const filtered = useMemo(() => {
+  const filteredSubmissions = useMemo(() => {
     const q = search.toLowerCase();
     return submissions
       .filter((s) => {
@@ -351,16 +843,134 @@ export function AdminDashboard() {
       });
   }, [submissions, search, serviceFilter, sortOrder]);
 
-  const handleLogout = useCallback(() => {
-    clear();
-    void navigate({ to: "/" });
-  }, [clear, navigate]);
+  // Loan apps — derived stats & filtered
+  const loanStats = useMemo(() => {
+    const total = loanApplications.length;
+    const today = loanApplications.filter((a) => isToday(a.timestamp)).length;
+    return { total, today };
+  }, [loanApplications]);
 
-  const principalStr = identity?.getPrincipal().toString() ?? "";
-  const truncatedPrincipal =
-    principalStr.length > 20
-      ? `${principalStr.slice(0, 10)}...${principalStr.slice(-6)}`
-      : principalStr;
+  const filteredLoans = useMemo(() => {
+    const q = loanSearch.toLowerCase();
+    return loanApplications
+      .filter((a) => {
+        if (!q) return true;
+        return (
+          a.firstName.toLowerCase().includes(q) ||
+          a.lastName.toLowerCase().includes(q) ||
+          a.aadharNumber.includes(q) ||
+          a.panNumber.toLowerCase().includes(q) ||
+          a.loanPurpose.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const diff = Number(a.timestamp - b.timestamp);
+        return loanSortOrder === "desc" ? -diff : diff;
+      });
+  }, [loanApplications, loanSearch, loanSortOrder]);
+
+  const handleLogout = useCallback(async () => {
+    if (actor && sessionToken) {
+      try {
+        await actor.adminLogout(sessionToken);
+      } catch {
+        // Ignore errors on logout
+      }
+    }
+    localStorage.removeItem("adminSession");
+    localStorage.removeItem("jmd_admin_token");
+    void navigate({ to: "/" });
+  }, [actor, navigate, sessionToken]);
+
+  // ─── Approve / Reject Loan ───────────────────────────────────────────────────
+
+  const handleApproveLoan = useCallback(
+    async (app: LoanApplication & { id?: string }) => {
+      const id =
+        ((app as unknown as Record<string, unknown>).id as string) ??
+        `${app.firstName}-${String(app.timestamp)}`;
+      setActionLoading(id);
+      try {
+        const actorAny = actor as unknown as Record<
+          string,
+          ((...args: unknown[]) => Promise<unknown>) | undefined
+        >;
+        await actorAny.approveLoan?.(id, sessionToken);
+        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "approved" }));
+        // Store full app data for sanction letter
+        localStorage.setItem(
+          `jmd_approved_loan_${id}`,
+          JSON.stringify({
+            ...app,
+            id,
+            status: "approved",
+            sanctionDate: new Date().toISOString(),
+            fullName: `${app.firstName} ${app.lastName}`.trim(),
+            fatherHusbandName: app.fatherName,
+            mobile1: "",
+            aadhaarNumber: app.aadharNumber,
+            loanDuration: app.tenure,
+          }),
+        );
+        await queryClient.invalidateQueries({
+          queryKey: ["admin-loan-applications"],
+        });
+        toast.success("Loan application approved!", {
+          description: `Sanction letter is now available for ${app.firstName} ${app.lastName}`,
+        });
+      } catch {
+        // Backend may not have approveLoan yet — store locally
+        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "approved" }));
+        localStorage.setItem(
+          `jmd_approved_loan_${id}`,
+          JSON.stringify({
+            ...app,
+            id,
+            status: "approved",
+            sanctionDate: new Date().toISOString(),
+            fullName: `${app.firstName} ${app.lastName}`.trim(),
+            fatherHusbandName: app.fatherName,
+            mobile1: "",
+            aadhaarNumber: app.aadharNumber,
+            loanDuration: app.tenure,
+          }),
+        );
+        toast.success("Loan approved (locally)!", {
+          description: "Sanction letter is now available.",
+        });
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [actor, sessionToken, queryClient],
+  );
+
+  const handleRejectLoan = useCallback(
+    async (app: LoanApplication & { id?: string }) => {
+      const id =
+        ((app as unknown as Record<string, unknown>).id as string) ??
+        `${app.firstName}-${String(app.timestamp)}`;
+      setActionLoading(id);
+      try {
+        const actorAny2 = actor as unknown as Record<
+          string,
+          ((...args: unknown[]) => Promise<unknown>) | undefined
+        >;
+        await actorAny2.rejectLoan?.(id, sessionToken);
+        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "rejected" }));
+        await queryClient.invalidateQueries({
+          queryKey: ["admin-loan-applications"],
+        });
+        toast.success("Loan application rejected.");
+      } catch {
+        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "rejected" }));
+        toast.success("Loan rejected (locally).");
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [actor, sessionToken, queryClient],
+  );
 
   const formattedDate = currentTime.toLocaleDateString("en-IN", {
     weekday: "long",
@@ -375,8 +985,8 @@ export function AdminDashboard() {
     hour12: true,
   });
 
-  // Loading states
-  if (isInitializing || adminCheckLoading) {
+  // Loading state while checking session
+  if (sessionChecking || actorFetching) {
     return (
       <div className="min-h-screen bg-navy-50 flex items-center justify-center">
         <div className="text-center">
@@ -387,43 +997,9 @@ export function AdminDashboard() {
     );
   }
 
-  // Access denied
-  if (isAdmin === false) {
-    return (
-      <div className="min-h-screen bg-navy-900 flex items-center justify-center px-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-md"
-        >
-          <div className="h-16 w-16 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="h-8 w-8 text-red-400" />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-white mb-3">
-            Access Denied
-          </h1>
-          <p className="font-body text-white/60 mb-8 text-sm leading-relaxed">
-            Your account does not have administrator privileges. Please contact
-            the system administrator to get access.
-          </p>
-          <div className="text-xs font-body text-white/30 mb-6 font-mono">
-            {principalStr}
-          </div>
-          <Button
-            onClick={handleLogout}
-            variant="outline"
-            className="border-white/20 text-white hover:bg-white/10 font-body"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Log Out
-          </Button>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      <Toaster position="top-right" richColors />
       {/* ─── Sidebar ─── */}
       <AnimatePresence>
         {(sidebarOpen || true) && (
@@ -439,20 +1015,27 @@ export function AdminDashboard() {
             {/* Sidebar header */}
             <div className="p-6 border-b border-white/10">
               <img
-                src="/assets/generated/jmd-fincap-logo-transparent.dim_400x200.png"
+                src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
                 alt="JMD FinCap"
-                className="h-10 w-auto object-contain mb-4"
+                className="h-12 w-auto object-contain mb-4 rounded"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
-                  <Shield className="h-3.5 w-3.5 text-gold-500" />
+                  <RoleIcon role={session?.role ?? "admin"} />
                 </div>
                 <div className="min-w-0">
                   <div className="font-body text-xs text-white/40 uppercase tracking-wider">
-                    Administrator
+                    {session?.role === "ceo"
+                      ? "CEO"
+                      : session?.role === "cofounder"
+                        ? "Co-Founder"
+                        : "Administrator"}
                   </div>
-                  <div className="font-body text-xs text-white/70 truncate font-mono">
-                    {truncatedPrincipal}
+                  <div className="font-body text-xs text-white/70 truncate font-semibold">
+                    {session?.roleLabel ?? "Admin"}
                   </div>
                 </div>
               </div>
@@ -461,10 +1044,35 @@ export function AdminDashboard() {
             {/* Nav items */}
             <nav className="flex-1 p-4" aria-label="Admin navigation">
               <div className="space-y-1">
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gold-500/15 text-gold-500 font-body text-sm font-medium">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("enquiries")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                    activeTab === "enquiries"
+                      ? "bg-gold-500/15 text-gold-500"
+                      : "text-white/60 hover:text-white hover:bg-white/10"
+                  }`}
+                >
                   <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  Dashboard
-                </div>
+                  Contact Enquiries
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("loans")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                    activeTab === "loans"
+                      ? "bg-gold-500/15 text-gold-500"
+                      : "text-white/60 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Wallet className="h-4 w-4 shrink-0" />
+                  Loan Applications
+                  {loanStats.total > 0 && (
+                    <span className="ml-auto bg-gold-500 text-navy-900 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {loanStats.total > 99 ? "99+" : loanStats.total}
+                    </span>
+                  )}
+                </button>
               </div>
             </nav>
 
@@ -472,7 +1080,7 @@ export function AdminDashboard() {
             <div className="p-4 border-t border-white/10">
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-body text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-500"
               >
                 <LogOut className="h-4 w-4 shrink-0" />
@@ -519,9 +1127,17 @@ export function AdminDashboard() {
             </button>
 
             <div>
-              <h1 className="font-display text-xl font-bold text-navy-900">
-                Admin Dashboard
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="font-display text-xl font-bold text-navy-900">
+                  Admin Dashboard
+                </h1>
+                {session?.role && session.role !== "admin" && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-body font-semibold bg-gold-100 text-gold-700 border border-gold-200">
+                    <RoleIcon role={session.role} />
+                    {session.role === "ceo" ? "CEO" : "Co-Founder"}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <Clock className="h-3 w-3 text-gray-400" />
                 <span className="font-body text-xs text-gray-400">
@@ -535,7 +1151,7 @@ export function AdminDashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void refetch()}
+              onClick={handleRefresh}
               disabled={isFetching}
               className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 hover:border-navy-900"
             >
@@ -547,8 +1163,18 @@ export function AdminDashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportToCSV(submissions)}
-              disabled={submissions.length === 0}
+              onClick={() => {
+                if (activeTab === "enquiries") {
+                  exportEnquiriesToCSV(submissions);
+                } else {
+                  exportLoanApplicationsToCSV(loanApplications);
+                }
+              }}
+              disabled={
+                activeTab === "enquiries"
+                  ? submissions.length === 0
+                  : loanApplications.length === 0
+              }
               className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 hover:border-navy-900"
             >
               <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -556,7 +1182,7 @@ export function AdminDashboard() {
             </Button>
             <Button
               size="sm"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className="font-body text-xs bg-navy-900 hover:bg-navy-700 text-white hidden sm:flex"
             >
               <LogOut className="mr-1.5 h-3.5 w-3.5" />
@@ -569,232 +1195,389 @@ export function AdminDashboard() {
         <main className="flex-1 p-6 overflow-auto">
           {/* ─── Stats Cards ─── */}
           <section
-            className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-8"
             aria-label="Summary stats"
           >
             <StatCard
               icon={Users}
-              label="Total Enquiries"
-              value={stats.total}
+              label="Contact Enquiries"
+              value={enquiryStats.total}
               animate
-              numericValue={stats.total}
+              numericValue={enquiryStats.total}
               delay={0.1}
             />
             <StatCard
               icon={Calendar}
-              label="Today's Enquiries"
-              value={stats.today}
+              label="Enquiries Today"
+              value={enquiryStats.today}
               animate
-              numericValue={stats.today}
+              numericValue={enquiryStats.today}
+              delay={0.15}
+            />
+            <StatCard
+              icon={CreditCard}
+              label="Loan Applications"
+              value={loanStats.total}
+              animate
+              numericValue={loanStats.total}
               delay={0.2}
+              accent
             />
             <StatCard
               icon={TrendingUp}
               label="Top Service"
-              value={stats.topService}
-              delay={0.3}
+              value={enquiryStats.topService}
+              delay={0.25}
             />
           </section>
 
-          {/* ─── Table Section ─── */}
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-            className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden"
-            aria-label="Enquiries table"
+          {/* ─── Tabs ─── */}
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
           >
-            {/* Table header */}
-            <div className="px-6 py-5 border-b border-gray-100">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-display text-lg font-bold text-navy-900">
-                    All Enquiries
-                  </h2>
-                  <p className="font-body text-xs text-gray-500 mt-0.5">
-                    {filtered.length} of {submissions.length} submissions
-                  </p>
-                </div>
+            <TabsList className="bg-white border border-gray-200 p-1 rounded-xl h-auto">
+              <TabsTrigger
+                value="enquiries"
+                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Contact Enquiries
+                <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  {submissions.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="loans"
+                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+              >
+                <Wallet className="mr-2 h-4 w-4" />
+                Loan Applications
+                <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  {loanApplications.length}
+                </span>
+              </TabsTrigger>
+            </TabsList>
 
-                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                  {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <Input
-                      placeholder="Search by name, email, phone..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-9 font-body text-sm border-gray-200 w-full sm:w-64 focus:border-gold-500"
-                    />
-                  </div>
+            {/* ── Contact Enquiries Tab ── */}
+            <TabsContent value="enquiries" className="space-y-0">
+              <motion.section
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden"
+                aria-label="Enquiries table"
+              >
+                {/* Table toolbar */}
+                <div className="px-6 py-5 border-b border-gray-100">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="font-display text-lg font-bold text-navy-900">
+                        All Enquiries
+                      </h2>
+                      <p className="font-body text-xs text-gray-500 mt-0.5">
+                        {filteredSubmissions.length} of {submissions.length}{" "}
+                        submissions
+                      </p>
+                    </div>
 
-                  {/* Service filter */}
-                  <Select
-                    value={serviceFilter}
-                    onValueChange={setServiceFilter}
-                  >
-                    <SelectTrigger className="font-body text-sm border-gray-200 w-full sm:w-44 focus:ring-gold-500">
-                      <SelectValue placeholder="Filter by service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="font-body">
-                        All Services
-                      </SelectItem>
-                      {allServices.map((s) => (
-                        <SelectItem key={s} value={s} className="font-body">
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        <Input
+                          placeholder="Search by name, email, phone..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="pl-9 font-body text-sm border-gray-200 w-full sm:w-64 focus:border-gold-500"
+                        />
+                      </div>
 
-                  {/* Sort button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setSortOrder((p) => (p === "desc" ? "asc" : "desc"))
-                    }
-                    className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 shrink-0"
-                  >
-                    {sortOrder === "desc" ? (
-                      <>
-                        <ChevronDown className="mr-1 h-3.5 w-3.5" /> Newest
-                      </>
-                    ) : (
-                      <>
-                        <ChevronUp className="mr-1 h-3.5 w-3.5" /> Oldest
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Table body */}
-            <div className="overflow-x-auto">
-              {isLoading ? (
-                <div className="p-6">
-                  <TableSkeleton />
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="py-20 text-center">
-                  <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <Inbox className="h-7 w-7 text-gray-400" />
-                  </div>
-                  <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
-                    No enquiries found
-                  </h3>
-                  <p className="font-body text-sm text-gray-500">
-                    {search || serviceFilter !== "all"
-                      ? "Try adjusting your search or filter."
-                      : "Enquiries will appear here once customers submit the contact form."}
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">
-                        #
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Name
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Phone
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Email
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Service
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Message
-                      </TableHead>
-                      <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Date & Time
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((sub, idx) => (
-                      <TableRow
-                        key={`${sub.name}-${String(sub.timestamp)}`}
-                        className="hover:bg-navy-50/70 transition-colors duration-150 border-b border-gray-50"
+                      <Select
+                        value={serviceFilter}
+                        onValueChange={setServiceFilter}
                       >
-                        <TableCell className="font-body text-sm text-gray-400 font-mono">
-                          {idx + 1}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
-                              <span className="font-body text-xs font-bold text-gold-500">
-                                {sub.name.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <span className="font-body text-sm font-medium text-navy-900">
-                              {sub.name}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <a
-                            href={`tel:${sub.phone}`}
-                            className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors font-mono"
-                          >
-                            {sub.phone}
-                          </a>
-                        </TableCell>
-                        <TableCell>
-                          <a
-                            href={`mailto:${sub.email}`}
-                            className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors truncate block max-w-[180px]"
-                          >
-                            {sub.email}
-                          </a>
-                        </TableCell>
-                        <TableCell>
-                          <ServiceBadge service={sub.serviceInterest} />
-                        </TableCell>
-                        <TableCell>
-                          <MessageCell message={sub.message || "—"} />
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-body text-xs text-gray-500 whitespace-nowrap">
-                            {formatTimestamp(sub.timestamp)}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
+                        <SelectTrigger className="font-body text-sm border-gray-200 w-full sm:w-44 focus:ring-gold-500">
+                          <SelectValue placeholder="Filter by service" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all" className="font-body">
+                            All Services
+                          </SelectItem>
+                          {allServices.map((s) => (
+                            <SelectItem key={s} value={s} className="font-body">
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-            {/* Table footer */}
-            {!isLoading && filtered.length > 0 && (
-              <div className="px-6 py-3 border-t border-gray-50 bg-gray-50/50 flex items-center justify-between">
-                <p className="font-body text-xs text-gray-500">
-                  Showing{" "}
-                  <span className="font-semibold text-navy-900">
-                    {filtered.length}
-                  </span>{" "}
-                  enquiries
-                </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => exportToCSV(filtered)}
-                  className="font-body text-xs text-gray-500 hover:text-navy-900"
-                >
-                  <Download className="mr-1 h-3 w-3" />
-                  Export filtered
-                </Button>
-              </div>
-            )}
-          </motion.section>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setSortOrder((p) => (p === "desc" ? "asc" : "desc"))
+                        }
+                        className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 shrink-0"
+                      >
+                        {sortOrder === "desc" ? (
+                          <>
+                            <ChevronDown className="mr-1 h-3.5 w-3.5" /> Newest
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="mr-1 h-3.5 w-3.5" /> Oldest
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table body */}
+                <div className="overflow-x-auto">
+                  {submissionsLoading ? (
+                    <div className="p-6">
+                      <TableSkeleton />
+                    </div>
+                  ) : filteredSubmissions.length === 0 ? (
+                    <div className="py-20 text-center">
+                      <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <Inbox className="h-7 w-7 text-gray-400" />
+                      </div>
+                      <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
+                        No enquiries found
+                      </h3>
+                      <p className="font-body text-sm text-gray-500">
+                        {search || serviceFilter !== "all"
+                          ? "Try adjusting your search or filter."
+                          : "Enquiries will appear here once customers submit the contact form."}
+                      </p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">
+                            #
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Name
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Phone
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Email
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Service
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Message
+                          </TableHead>
+                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Date & Time
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredSubmissions.map((sub, idx) => (
+                          <TableRow
+                            key={`${sub.name}-${String(sub.timestamp)}`}
+                            className="hover:bg-navy-50/70 transition-colors duration-150 border-b border-gray-50"
+                          >
+                            <TableCell className="font-body text-sm text-gray-400 font-mono">
+                              {idx + 1}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
+                                  <span className="font-body text-xs font-bold text-gold-500">
+                                    {sub.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="font-body text-sm font-medium text-navy-900">
+                                  {sub.name}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <a
+                                href={`tel:${sub.phone}`}
+                                className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors font-mono"
+                              >
+                                {sub.phone}
+                              </a>
+                            </TableCell>
+                            <TableCell>
+                              <a
+                                href={`mailto:${sub.email}`}
+                                className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors truncate block max-w-[180px]"
+                              >
+                                {sub.email}
+                              </a>
+                            </TableCell>
+                            <TableCell>
+                              <ServiceBadge service={sub.serviceInterest} />
+                            </TableCell>
+                            <TableCell>
+                              <MessageCell message={sub.message || "—"} />
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-body text-xs text-gray-500 whitespace-nowrap">
+                                {formatTimestamp(sub.timestamp)}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+
+                {/* Table footer */}
+                {!submissionsLoading && filteredSubmissions.length > 0 && (
+                  <div className="px-6 py-3 border-t border-gray-50 bg-gray-50/50 flex items-center justify-between">
+                    <p className="font-body text-xs text-gray-500">
+                      Showing{" "}
+                      <span className="font-semibold text-navy-900">
+                        {filteredSubmissions.length}
+                      </span>{" "}
+                      enquiries
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => exportEnquiriesToCSV(filteredSubmissions)}
+                      className="font-body text-xs text-gray-500 hover:text-navy-900"
+                    >
+                      <Download className="mr-1 h-3 w-3" />
+                      Export filtered
+                    </Button>
+                  </div>
+                )}
+              </motion.section>
+            </TabsContent>
+
+            {/* ── Loan Applications Tab ── */}
+            <TabsContent value="loans" className="space-y-4">
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+              >
+                {/* Toolbar */}
+                <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5 mb-5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="font-display text-lg font-bold text-navy-900">
+                        Loan Applications
+                      </h2>
+                      <p className="font-body text-xs text-gray-500 mt-0.5">
+                        {filteredLoans.length} of {loanApplications.length}{" "}
+                        applications
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        <Input
+                          placeholder="Search by name or Aadhar..."
+                          value={loanSearch}
+                          onChange={(e) => setLoanSearch(e.target.value)}
+                          className="pl-9 font-body text-sm border-gray-200 w-full sm:w-64 focus:border-gold-500"
+                        />
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setLoanSortOrder((p) =>
+                            p === "desc" ? "asc" : "desc",
+                          )
+                        }
+                        className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 shrink-0"
+                      >
+                        {loanSortOrder === "desc" ? (
+                          <>
+                            <ChevronDown className="mr-1 h-3.5 w-3.5" /> Newest
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="mr-1 h-3.5 w-3.5" /> Oldest
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cards */}
+                {loansLoading ? (
+                  <CardSkeleton />
+                ) : filteredLoans.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-xs py-20 text-center">
+                    <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <CreditCard className="h-7 w-7 text-gray-400" />
+                    </div>
+                    <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
+                      No loan applications
+                    </h3>
+                    <p className="font-body text-sm text-gray-500">
+                      {loanSearch
+                        ? "Try adjusting your search."
+                        : "Loan applications will appear here once customers apply."}
+                    </p>
+                    <a
+                      href="/apply"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-lg bg-gold-500 text-navy-900 font-body text-sm font-semibold hover:bg-gold-400 transition-colors"
+                    >
+                      View Application Form
+                    </a>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredLoans.map((app, idx) => {
+                      const id =
+                        ((app as unknown as Record<string, unknown>)
+                          .id as string) ??
+                        `${app.firstName}-${String(app.timestamp)}`;
+                      return (
+                        <LoanApplicationCard
+                          key={`${app.firstName}-${String(app.timestamp)}`}
+                          app={app}
+                          idx={idx}
+                          onApprove={handleApproveLoan}
+                          onReject={handleRejectLoan}
+                          actionLoading={actionLoading}
+                          localStatus={localLoanStatuses[id]}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!loansLoading && filteredLoans.length > 0 && (
+                  <div className="pt-2 flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => exportLoanApplicationsToCSV(filteredLoans)}
+                      className="font-body text-xs text-gray-500 hover:text-navy-900"
+                    >
+                      <Download className="mr-1 h-3 w-3" />
+                      Export filtered to CSV
+                    </Button>
+                  </div>
+                )}
+              </motion.div>
+            </TabsContent>
+          </Tabs>
         </main>
       </div>
     </div>

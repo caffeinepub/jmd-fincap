@@ -103,14 +103,7 @@ function useScrollFade() {
 // ─── NavBar ───────────────────────────────────────────────────────────────────
 
 function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 30);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   const navLinks = [
     { label: "Home", href: "#home" },
@@ -127,13 +120,9 @@ function Navbar() {
   };
 
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? "bg-navy-900 shadow-navy py-2" : "bg-transparent py-4"
-      }`}
-    >
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm py-3">
       <div className="container mx-auto px-4 flex items-center justify-between">
-        {/* Logo + Name */}
+        {/* Logo */}
         <button
           type="button"
           onClick={() => scrollTo("#home")}
@@ -141,9 +130,9 @@ function Navbar() {
           aria-label="JMD FinCap — Go to top"
         >
           <img
-            src="/assets/generated/jmd-fincap-logo-transparent.dim_400x200.png"
+            src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
             alt="JMD FinCap logo"
-            className="h-10 w-auto object-contain"
+            className="h-12 w-auto object-contain"
           />
         </button>
 
@@ -157,14 +146,20 @@ function Navbar() {
               type="button"
               key={link.href}
               onClick={() => scrollTo(link.href)}
-              className="text-sm font-body font-medium text-white/80 hover:text-gold-500 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded px-1"
+              className="text-sm font-body font-medium text-navy-900 hover:text-gold-500 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded px-1"
             >
               {link.label}
             </button>
           ))}
           <a
+            href="/apply"
+            className="text-sm font-body font-medium text-navy-900 hover:text-gold-500 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded px-1"
+          >
+            Apply Loan
+          </a>
+          <a
             href="/admin"
-            className="text-xs font-body font-medium text-white/30 hover:text-white/60 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 rounded px-1"
+            className="text-xs font-body font-medium text-gray-400 hover:text-gray-600 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400 rounded px-1"
             aria-label="Admin panel"
           >
             Admin
@@ -172,7 +167,7 @@ function Navbar() {
           <button
             type="button"
             onClick={() => scrollTo("#contact")}
-            className="ml-4 px-5 py-2 rounded text-sm font-semibold bg-gold-500 text-navy-900 hover:bg-gold-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="ml-4 px-5 py-2 rounded text-sm font-semibold bg-gold-500 text-navy-900 hover:bg-gold-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-900"
           >
             Get Consultation
           </button>
@@ -181,7 +176,7 @@ function Navbar() {
         {/* Mobile hamburger */}
         <button
           type="button"
-          className="md:hidden text-white p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded"
+          className="md:hidden text-navy-900 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
@@ -197,7 +192,7 @@ function Navbar() {
       {/* Mobile menu */}
       {mobileOpen && (
         <nav
-          className="md:hidden bg-navy-900 border-t border-white/10 px-4 py-4 flex flex-col gap-1"
+          className="md:hidden bg-white border-t border-gray-100 px-4 py-4 flex flex-col gap-1"
           aria-label="Mobile navigation"
         >
           {navLinks.map((link) => (
@@ -205,11 +200,18 @@ function Navbar() {
               type="button"
               key={link.href}
               onClick={() => scrollTo(link.href)}
-              className="text-left py-3 px-4 text-white/80 hover:text-gold-500 hover:bg-white/5 rounded font-body font-medium transition-colors duration-200"
+              className="text-left py-3 px-4 text-navy-900 hover:text-gold-500 hover:bg-gray-50 rounded font-body font-medium transition-colors duration-200"
             >
               {link.label}
             </button>
           ))}
+          <a
+            href="/apply"
+            className="py-3 px-4 text-navy-900 hover:text-gold-500 hover:bg-gray-50 rounded font-body font-medium transition-colors duration-200"
+            onClick={() => setMobileOpen(false)}
+          >
+            Apply Loan
+          </a>
           <button
             type="button"
             onClick={() => scrollTo("#contact")}
@@ -295,6 +297,12 @@ function HeroSection() {
             >
               Get Free Consultation
             </button>
+            <a
+              href="/apply"
+              className="px-8 py-4 rounded font-body font-semibold text-white border-2 border-gold-500 hover:bg-gold-500 hover:text-navy-900 transition-all duration-200 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+            >
+              Apply for Loan
+            </a>
             <button
               type="button"
               onClick={() =>
@@ -302,7 +310,7 @@ function HeroSection() {
                   .querySelector("#services")
                   ?.scrollIntoView({ behavior: "smooth" })
               }
-              className="px-8 py-4 rounded font-body font-semibold text-white border border-white/30 hover:border-gold-500 hover:text-gold-500 transition-all duration-200 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+              className="px-8 py-4 rounded font-body font-semibold text-white border border-white/30 hover:border-white/60 hover:text-white/90 transition-all duration-200 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
             >
               Our Services
             </button>
@@ -919,9 +927,9 @@ function Footer() {
           {/* Brand */}
           <div>
             <img
-              src="/assets/generated/jmd-fincap-logo-transparent.dim_400x200.png"
+              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
               alt="JMD FinCap"
-              className="h-12 w-auto mb-4"
+              className="h-14 w-auto mb-4 object-contain rounded"
             />
             <p className="font-body text-white/50 text-sm leading-relaxed mb-6 max-w-xs">
               Your trusted partner for comprehensive financial services in

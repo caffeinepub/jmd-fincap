@@ -7,6 +7,8 @@ import {
 import { HomePage } from "./App";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { AdminLogin } from "./pages/AdminLogin";
+import { LoanApplicationPage } from "./pages/LoanApplicationPage";
+import { SanctionLetterPage } from "./pages/SanctionLetterPage";
 
 // Root route — just an outlet
 const rootRoute = createRootRoute({
@@ -18,6 +20,13 @@ const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: HomePage,
+});
+
+// Loan application route
+const applyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/apply",
+  component: LoanApplicationPage,
 });
 
 // Admin login route
@@ -34,10 +43,19 @@ const adminRoute = createRoute({
   component: AdminDashboard,
 });
 
+// Sanction letter route
+const sanctionLetterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sanction-letter",
+  component: SanctionLetterPage,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
+  applyRoute,
   adminLoginRoute,
   adminRoute,
+  sanctionLetterRoute,
 ]);
 
 export const router = createRouter({

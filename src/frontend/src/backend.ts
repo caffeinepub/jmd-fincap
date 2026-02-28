@@ -97,6 +97,26 @@ export interface ContactFormSubmission {
     timestamp: Time;
     phone: string;
 }
+export interface LoanApplication {
+    photoFile: string;
+    aadharCardFile: string;
+    employeeType: string;
+    loanAmount: string;
+    dateOfBirth: string;
+    motherName: string;
+    loanType: string;
+    signatureFile: string;
+    aadharNumber: string;
+    fatherName: string;
+    timestamp: Time;
+    panNumber: string;
+    tenure: string;
+    lastName: string;
+    panCardFile: string;
+    loanPurpose: string;
+    monthlyIncome: string;
+    firstName: string;
+}
 export type Time = bigint;
 export interface UserProfile {
     name: string;
@@ -108,14 +128,20 @@ export enum UserRole {
 }
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    adminLogin(username: string, password: string): Promise<string>;
+    adminLogout(token: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    getAllSubmissions(): Promise<Array<ContactFormSubmission>>;
+    getAllLoanApplications(sessionToken: string): Promise<Array<LoanApplication>>;
+    getAllSubmissions(sessionToken: string): Promise<Array<ContactFormSubmission>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    setAdminPassword(currentPassword: string, newPassword: string): Promise<boolean>;
     submitContactForm(name: string, phone: string, email: string, serviceInterest: string, message: string): Promise<void>;
+    submitLoanApplication(firstName: string, lastName: string, dateOfBirth: string, motherName: string, fatherName: string, aadharNumber: string, panNumber: string, loanPurpose: string, loanType: string, tenure: string, loanAmount: string, monthlyIncome: string, employeeType: string, aadharCardFile: string, panCardFile: string, photoFile: string, signatureFile: string): Promise<void>;
+    validateAdminSession(token: string): Promise<boolean>;
 }
 import type { UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -134,6 +160,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async adminLogin(arg0: string, arg1: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminLogin(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminLogin(arg0, arg1);
+            return result;
+        }
+    }
+    async adminLogout(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminLogout(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminLogout(arg0);
+            return result;
+        }
+    }
     async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
         if (this.processError) {
             try {
@@ -148,17 +202,31 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getAllSubmissions(): Promise<Array<ContactFormSubmission>> {
+    async getAllLoanApplications(arg0: string): Promise<Array<LoanApplication>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllSubmissions();
+                const result = await this.actor.getAllLoanApplications(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllSubmissions();
+            const result = await this.actor.getAllLoanApplications(arg0);
+            return result;
+        }
+    }
+    async getAllSubmissions(arg0: string): Promise<Array<ContactFormSubmission>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllSubmissions(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllSubmissions(arg0);
             return result;
         }
     }
@@ -232,6 +300,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async setAdminPassword(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setAdminPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setAdminPassword(arg0, arg1);
+            return result;
+        }
+    }
     async submitContactForm(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<void> {
         if (this.processError) {
             try {
@@ -243,6 +325,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.submitContactForm(arg0, arg1, arg2, arg3, arg4);
+            return result;
+        }
+    }
+    async submitLoanApplication(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string, arg8: string, arg9: string, arg10: string, arg11: string, arg12: string, arg13: string, arg14: string, arg15: string, arg16: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitLoanApplication(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitLoanApplication(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16);
+            return result;
+        }
+    }
+    async validateAdminSession(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.validateAdminSession(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.validateAdminSession(arg0);
             return result;
         }
     }

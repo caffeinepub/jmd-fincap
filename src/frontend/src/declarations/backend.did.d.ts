@@ -18,6 +18,26 @@ export interface ContactFormSubmission {
   'timestamp' : Time,
   'phone' : string,
 }
+export interface LoanApplication {
+  'photoFile' : string,
+  'aadharCardFile' : string,
+  'employeeType' : string,
+  'loanAmount' : string,
+  'dateOfBirth' : string,
+  'motherName' : string,
+  'loanType' : string,
+  'signatureFile' : string,
+  'aadharNumber' : string,
+  'fatherName' : string,
+  'timestamp' : Time,
+  'panNumber' : string,
+  'tenure' : string,
+  'lastName' : string,
+  'panCardFile' : string,
+  'loanPurpose' : string,
+  'monthlyIncome' : string,
+  'firstName' : string,
+}
 export type Time = bigint;
 export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
@@ -25,17 +45,44 @@ export type UserRole = { 'admin' : null } |
   { 'guest' : null };
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'adminLogin' : ActorMethod<[string, string], string>,
+  'adminLogout' : ActorMethod<[string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'getAllSubmissions' : ActorMethod<[], Array<ContactFormSubmission>>,
+  'getAllLoanApplications' : ActorMethod<[string], Array<LoanApplication>>,
+  'getAllSubmissions' : ActorMethod<[string], Array<ContactFormSubmission>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setAdminPassword' : ActorMethod<[string, string], boolean>,
   'submitContactForm' : ActorMethod<
     [string, string, string, string, string],
     undefined
   >,
+  'submitLoanApplication' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    undefined
+  >,
+  'validateAdminSession' : ActorMethod<[string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
