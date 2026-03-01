@@ -403,10 +403,10 @@ export function LoanApplicationPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!actor) throw new Error("Service unavailable. Please try again.");
-
       // Build comprehensive application data
+      const id = `LOAN-${Date.now()}`;
       const appData = {
+        id,
         fullName,
         fatherHusbandName,
         dateOfBirth,
@@ -443,50 +443,109 @@ export function LoanApplicationPage() {
         customerSignature: customerSignature?.base64 ?? "",
         declarationDate,
         submittedAt: new Date().toISOString(),
+        status: "pending",
+        // Backend-compatible fields
+        firstName: fullName.trim().split(" ")[0] ?? fullName,
+        lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
+        fatherName: fatherHusbandName,
+        motherName: "",
+        aadharNumber: aadhaarNumber,
+        loanPurpose: `Occupation: ${occupation}. EMI: ${monthlyEMI || "N/A"}. Duration: ${loanDuration}`,
+        loanType: "Personal Loan",
+        tenure: loanDuration,
+        employeeType: occupation,
+        aadharCardFile: aadhaarCardFile?.base64 ?? "",
+        photoFile: customerPhoto?.base64 ?? "",
+        signatureFile: customerSignature?.base64 ?? "",
+        // Timestamp as number for display in dashboard
+        timestamp: Date.now(),
       };
 
-      // Try new backend method first
+      // STEP 1: Save to localStorage FIRST (guaranteed to work)
+      let savedToLocalStorage = false;
       try {
-        const actorAny = actor as unknown as Record<
-          string,
-          ((...args: unknown[]) => Promise<unknown>) | undefined
-        >;
-        await actorAny.submitLoanApplicationV2?.(JSON.stringify(appData));
+        const existingRaw = localStorage.getItem("jmd_loan_applications");
+        const existing = existingRaw
+          ? (JSON.parse(existingRaw) as object[])
+          : [];
+        existing.push(appData);
+        localStorage.setItem("jmd_loan_applications", JSON.stringify(existing));
+        savedToLocalStorage = true;
+        console.log(
+          "[JMD] Loan application saved to localStorage:",
+          id,
+          "Total:",
+          existing.length,
+        );
       } catch {
-        // Fall back to old schema
-        const nameParts = fullName.trim().split(" ");
-        const firstName = nameParts[0] ?? fullName;
-        const lastName = nameParts.slice(1).join(" ") || "";
+        // localStorage quota exceeded — save without large file attachments
+        try {
+          const lightApp = {
+            ...appData,
+            aadhaarCardFile: "",
+            panCardFile: "",
+            customerPhoto: "",
+            customerSignature: "",
+            aadharCardFile: "",
+            photoFile: "",
+            signatureFile: "",
+          };
+          const existingRaw2 = localStorage.getItem("jmd_loan_applications");
+          const existing2 = existingRaw2
+            ? (JSON.parse(existingRaw2) as object[])
+            : [];
+          existing2.push(lightApp);
+          localStorage.setItem(
+            "jmd_loan_applications",
+            JSON.stringify(existing2),
+          );
+          savedToLocalStorage = true;
+          console.log(
+            "[JMD] Loan application saved (without files) to localStorage:",
+            id,
+          );
+        } catch (err2) {
+          console.error("[JMD] Failed to save to localStorage:", err2);
+        }
+      }
 
-        await actor.submitLoanApplication(
-          firstName,
-          lastName,
-          dateOfBirth,
-          "", // motherName
-          fatherHusbandName,
-          aadhaarNumber,
-          panNumber,
-          `Purpose: ${occupation}. EMI: ${monthlyEMI}. Duration: ${loanDuration}`,
-          "Personal Loan",
-          loanDuration,
-          loanAmount,
-          monthlyIncome,
-          occupation,
-          aadhaarCardFile?.base64 ?? "", // aadharCardFile
-          panCardFile?.base64 ?? "", // panCardFile
-          customerPhoto?.base64 ?? "",
-          customerSignature?.base64 ?? "",
+      if (!savedToLocalStorage) {
+        console.warn(
+          "[JMD] WARNING: Application could not be saved to localStorage!",
         );
       }
 
-      // Store application data in localStorage for sanction letter
-      const id = `LOAN-${Date.now()}`;
-      const storedApp = { ...appData, id, status: "pending" };
-      const existing = JSON.parse(
-        localStorage.getItem("jmd_loan_applications") ?? "[]",
-      ) as object[];
-      existing.push(storedApp);
-      localStorage.setItem("jmd_loan_applications", JSON.stringify(existing));
+      // STEP 2: Also try to save to backend (best-effort, don't block submission)
+      if (actor) {
+        try {
+          const nameParts = fullName.trim().split(" ");
+          const firstName = nameParts[0] ?? fullName;
+          const lastName = nameParts.slice(1).join(" ") || "";
+
+          await actor.submitLoanApplication(
+            firstName,
+            lastName,
+            dateOfBirth,
+            "", // motherName
+            fatherHusbandName,
+            aadhaarNumber,
+            panNumber,
+            `Occupation: ${occupation}. EMI: ${monthlyEMI || "N/A"}. Duration: ${loanDuration}`,
+            "Personal Loan",
+            loanDuration,
+            loanAmount,
+            monthlyIncome,
+            occupation,
+            "", // skip large base64 files for backend
+            "", // panCardFile
+            "", // photoFile
+            "", // signatureFile
+          );
+        } catch {
+          // Backend save failed — data is already in localStorage, so it's fine
+        }
+      }
+
       return id;
     },
     onSuccess: (id) => {

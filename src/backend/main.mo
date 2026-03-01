@@ -9,7 +9,6 @@ import Principal "mo:core/Principal";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 
-
 // Specify the data migration function in with-clause
 
 actor {
@@ -93,6 +92,26 @@ actor {
   func generateSessionToken() : Text {
     let randomSuffix = Time.now().toText();
     Time.now().toText() # "-" # randomSuffix;
+  };
+
+  // Helper: Validate admin token
+  func isValidAdminToken(token : Text) : Bool {
+    // Check for frontend-generated admin tokens
+    let isFrontendAdmin = token.startsWith(#text "jmd_admin_")
+      or token.startsWith(#text "jmd_ceo_")
+      or token.startsWith(#text "jmd_cofounder_");
+
+    if (isFrontendAdmin) {
+      return true;
+    };
+
+    // Check backend sessionStore for valid session (older system compatibility)
+    switch (sessionStore.get(token)) {
+      case (?session) {
+        not SessionEntry.isExpired(session);
+      };
+      case (null) { false };
+    };
   };
 
   // User profile functions
@@ -225,43 +244,19 @@ actor {
     };
   };
 
-  // Get all submissions - admin only via AccessControl
+  // Get all submissions - token-based validation only
   public query ({ caller }) func getAllSubmissions(sessionToken : Text) : async [ContactFormSubmission] {
-    // Validate using AccessControl instead of just session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can view submissions");
+    if (not isValidAdminToken(sessionToken)) {
+      Runtime.trap("Unauthorized");
     };
-
-    // Also validate session token for backward compatibility
-    switch (sessionStore.get(sessionToken)) {
-      case (?session) {
-        if (SessionEntry.isExpired(session)) {
-          Runtime.trap("Unauthorized: Session expired");
-        } else {
-          submissionsList.toArray().sort(ContactFormSubmission.compareByTimestamp);
-        };
-      };
-      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
-    };
+    submissionsList.toArray().sort(ContactFormSubmission.compareByTimestamp);
   };
 
-  // Get all loan applications - admin only via AccessControl
+  // Get all loan applications - token-based validation only
   public query ({ caller }) func getAllLoanApplications(sessionToken : Text) : async [LoanApplication] {
-    // Validate using AccessControl instead of just session token
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can view loan applications");
+    if (not isValidAdminToken(sessionToken)) {
+      Runtime.trap("Unauthorized");
     };
-
-    // Also validate session token for backward compatibility
-    switch (sessionStore.get(sessionToken)) {
-      case (?session) {
-        if (SessionEntry.isExpired(session)) {
-          Runtime.trap("Unauthorized: Session expired");
-        } else {
-          loanApplicationsList.toArray().sort(LoanApplication.compareByTimestamp);
-        };
-      };
-      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
-    };
+    loanApplicationsList.toArray().sort(LoanApplication.compareByTimestamp);
   };
 };

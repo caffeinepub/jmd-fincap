@@ -59,28 +59,60 @@ import { toast } from "sonner";
 
 // ─── Timestamp Utility ────────────────────────────────────────────────────────
 
-function formatTimestamp(ns: bigint): string {
-  const ms = Number(ns / BigInt(1_000_000));
-  const date = new Date(ms);
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+function safeTimestampToBigInt(ts: unknown): bigint {
+  if (typeof ts === "bigint") return ts;
+  if (typeof ts === "number" && !Number.isNaN(ts))
+    return BigInt(Math.floor(ts));
+  if (typeof ts === "string") {
+    const cleaned = ts.replace(/n$/, "").trim();
+    if (cleaned && !Number.isNaN(Number(cleaned))) return BigInt(cleaned);
+  }
+  return BigInt(0);
 }
 
-function isToday(ns: bigint): boolean {
-  const ms = Number(ns / BigInt(1_000_000));
-  const date = new Date(ms);
-  const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
+function formatTimestamp(ns: unknown): string {
+  try {
+    const nsBig = safeTimestampToBigInt(ns);
+    const ms =
+      nsBig > BigInt(1e15)
+        ? Number(nsBig / BigInt(1_000_000)) // nanoseconds → ms
+        : nsBig > BigInt(1e12)
+          ? Number(nsBig / BigInt(1_000)) // microseconds → ms
+          : Number(nsBig); // already ms
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function isToday(ns: unknown): boolean {
+  try {
+    const nsBig = safeTimestampToBigInt(ns);
+    const ms =
+      nsBig > BigInt(1e15)
+        ? Number(nsBig / BigInt(1_000_000))
+        : nsBig > BigInt(1e12)
+          ? Number(nsBig / BigInt(1_000))
+          : Number(nsBig);
+    const date = new Date(ms);
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
@@ -994,7 +1026,7 @@ export function AdminDashboard() {
     staleTime: 30_000,
   });
 
-  // Fetch loan applications
+  // Fetch loan applications (backend + localStorage merged)
   const {
     data: loanApplications = [],
     isLoading: loansLoading,
@@ -1003,19 +1035,135 @@ export function AdminDashboard() {
   } = useQuery<LoanApplication[]>({
     queryKey: ["admin-loan-applications"],
     queryFn: async () => {
-      if (!actor || !sessionToken) return [];
-      return actor.getAllLoanApplications(sessionToken);
+      // Always load from localStorage first
+      const localApps: LoanApplication[] = (() => {
+        try {
+          const raw = localStorage.getItem("jmd_loan_applications");
+          if (!raw) return [];
+          const parsed = JSON.parse(raw) as Record<string, unknown>[];
+          return parsed.map(
+            (app) =>
+              ({
+                firstName:
+                  (app.firstName as string) ||
+                  (app.fullName as string)?.split(" ")[0] ||
+                  "",
+                lastName:
+                  (app.lastName as string) ||
+                  (app.fullName as string)?.split(" ").slice(1).join(" ") ||
+                  "",
+                dateOfBirth: (app.dateOfBirth as string) || "",
+                motherName: (app.motherName as string) || "",
+                fatherName:
+                  (app.fatherName as string) ||
+                  (app.fatherHusbandName as string) ||
+                  "",
+                aadharNumber:
+                  (app.aadharNumber as string) ||
+                  (app.aadhaarNumber as string) ||
+                  "",
+                panNumber: (app.panNumber as string) || "",
+                loanPurpose:
+                  (app.loanPurpose as string) ||
+                  `Occupation: ${app.occupation || ""}`,
+                loanType: (app.loanType as string) || "Personal Loan",
+                tenure:
+                  (app.tenure as string) || (app.loanDuration as string) || "",
+                loanAmount: (app.loanAmount as string) || "",
+                monthlyIncome: (app.monthlyIncome as string) || "",
+                employeeType:
+                  (app.employeeType as string) ||
+                  (app.occupation as string) ||
+                  "",
+                aadharCardFile:
+                  (app.aadharCardFile as string) ||
+                  (app.aadhaarCardFile as string) ||
+                  "",
+                panCardFile: (app.panCardFile as string) || "",
+                photoFile:
+                  (app.photoFile as string) ||
+                  (app.customerPhoto as string) ||
+                  "",
+                signatureFile:
+                  (app.signatureFile as string) ||
+                  (app.customerSignature as string) ||
+                  "",
+                timestamp: (() => {
+                  const ts = app.timestamp;
+                  if (typeof ts === "bigint") return ts;
+                  if (typeof ts === "number" && ts > 0) {
+                    // Date.now() returns milliseconds — convert to nanoseconds
+                    return BigInt(Math.floor(ts)) * BigInt(1_000_000);
+                  }
+                  return BigInt(Date.now()) * BigInt(1_000_000);
+                })(),
+                // Extra fields preserved
+                ...(app as object),
+              }) as unknown as LoanApplication,
+          );
+        } catch {
+          return [];
+        }
+      })();
+
+      // Also try backend
+      let backendApps: LoanApplication[] = [];
+      if (actor && sessionToken) {
+        try {
+          backendApps = await actor.getAllLoanApplications(sessionToken);
+        } catch {
+          // backend failed, use localStorage only
+        }
+      }
+
+      // Merge: prefer localStorage data (has full details), deduplicate by unique id or timestamp
+      const seen = new Set<string>();
+      const merged: LoanApplication[] = [];
+
+      for (const app of [...localApps, ...backendApps]) {
+        const rawApp = app as unknown as Record<string, unknown>;
+        // Use unique id if available, otherwise use timestamp string (each app has unique Date.now() id)
+        const key =
+          (rawApp.id as string) ||
+          String(app.timestamp) ||
+          `${app.firstName || ""}-${(rawApp.aadhaarNumber as string) || app.aadharNumber || ""}-${app.dateOfBirth || ""}-${(rawApp.mobile1 as string) || ""}`;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          merged.push(app);
+        }
+      }
+
+      // Sort by timestamp descending (safe BigInt comparison)
+      return merged.sort((a, b) => {
+        const ta =
+          typeof a.timestamp === "bigint"
+            ? a.timestamp
+            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
+        const tb =
+          typeof b.timestamp === "bigint"
+            ? b.timestamp
+            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
+        if (tb > ta) return 1;
+        if (tb < ta) return -1;
+        return 0;
+      });
     },
-    enabled: !!actor && !actorFetching && sessionValid === true,
-    staleTime: 30_000,
+    enabled: sessionValid === true,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const isFetching = submissionsFetching || loansFetching;
 
   const handleRefresh = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["admin-loan-applications"],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["admin-submissions"] });
     void refetchSubmissions();
     void refetchLoans();
-  }, [refetchSubmissions, refetchLoans]);
+  }, [refetchSubmissions, refetchLoans, queryClient]);
 
   // Enquiries — derived stats & filtered
   const enquiryStats = useMemo(() => {
@@ -1051,8 +1199,16 @@ export function AdminDashboard() {
         return matchSearch && matchService;
       })
       .sort((a, b) => {
-        const diff = Number(a.timestamp - b.timestamp);
-        return sortOrder === "desc" ? -diff : diff;
+        const ta =
+          typeof a.timestamp === "bigint"
+            ? a.timestamp
+            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
+        const tb =
+          typeof b.timestamp === "bigint"
+            ? b.timestamp
+            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
+        const cmp = ta > tb ? 1 : ta < tb ? -1 : 0;
+        return sortOrder === "desc" ? -cmp : cmp;
       });
   }, [submissions, search, serviceFilter, sortOrder]);
 
@@ -1077,8 +1233,16 @@ export function AdminDashboard() {
         );
       })
       .sort((a, b) => {
-        const diff = Number(a.timestamp - b.timestamp);
-        return loanSortOrder === "desc" ? -diff : diff;
+        const ta =
+          typeof a.timestamp === "bigint"
+            ? a.timestamp
+            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
+        const tb =
+          typeof b.timestamp === "bigint"
+            ? b.timestamp
+            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
+        const cmp = ta > tb ? 1 : ta < tb ? -1 : 0;
+        return loanSortOrder === "desc" ? -cmp : cmp;
       });
   }, [loanApplications, loanSearch, loanSortOrder]);
 
