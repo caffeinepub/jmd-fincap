@@ -181,9 +181,18 @@ export function SanctionLetterPage() {
     `${appData?.firstName ?? ""} ${appData?.lastName ?? ""}`.trim();
   const fatherName = appData?.fatherHusbandName ?? appData?.fatherName ?? "—";
   const address = appData?.currentAddress ?? "—";
+  const permanentAddress = appData?.permanentAddress ?? "—";
   const mobile = appData?.mobile1 ?? "—";
+  const mobile2 = appData?.mobile2;
+  const email = appData?.email;
+  const dob = appData?.dateOfBirth ? formatDate(appData.dateOfBirth) : "—";
+  const landmark = appData?.nearestLandmark;
+  const houseType = appData?.houseType;
   const aadhaar = appData?.aadhaarNumber ?? appData?.aadharNumber ?? "—";
   const pan = appData?.panNumber ?? "—";
+  const occupation = appData?.occupation ?? appData?.employeeType ?? "—";
+  const workplaceName = appData?.workplaceName;
+  const workAddress = appData?.workAddress;
   const income = appData?.monthlyIncome ?? "—";
   const loanAmt = appData?.loanAmount ?? "—";
   const intRate = appData?.interestRate ?? "N/A";
@@ -193,6 +202,10 @@ export function SanctionLetterPage() {
     ? formatDate(appData.loanStartDate)
     : today;
   const lateFine = appData?.lateFineRule ?? "₹50 per day after due date";
+  const loanPurpose = appData?.loanPurpose;
+  const declarationDate = appData?.declarationDate
+    ? formatDate(appData.declarationDate)
+    : today;
   const refNo = appData?.id ?? loanId;
 
   if (loading) {
@@ -247,7 +260,7 @@ export function SanctionLetterPage() {
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+                  src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
                   alt="JMD FinCap"
                   className="h-16 w-auto object-contain"
                 />
@@ -268,7 +281,7 @@ export function SanctionLetterPage() {
                   Madhya Pradesh — 451001
                 </p>
                 <p className="font-body text-xs text-gray-500 mt-1">
-                  📞 +91 73546 96765
+                  📞 +91 88899 56204
                 </p>
                 <p className="font-body text-xs text-gray-500">
                   ✉ contact.jmdfincap@gmail.com
@@ -334,14 +347,44 @@ export function SanctionLetterPage() {
             {/* ── Borrower Details ── */}
             <div className="mb-6">
               <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
-                Borrower Information
+                1. Personal Details
               </h3>
               <table className="w-full">
                 <tbody>
                   <Row label="Full Name" value={name || "—"} />
                   <Row label="Father / Husband Name" value={fatherName} />
-                  <Row label="Address" value={address} />
-                  <Row label="Mobile No." value={mobile} />
+                  <Row label="Date of Birth" value={dob} />
+                  <Row label="Mobile No. 1" value={mobile} />
+                  {mobile2 && <Row label="Mobile No. 2" value={mobile2} />}
+                  {email && <Row label="Email" value={email} />}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Address Details ── */}
+            <div className="mb-6">
+              <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
+                2. Address Details
+              </h3>
+              <table className="w-full">
+                <tbody>
+                  <Row label="Current Address" value={address} />
+                  <Row label="Permanent Address" value={permanentAddress} />
+                  {landmark && (
+                    <Row label="Nearest Landmark" value={landmark} />
+                  )}
+                  {houseType && <Row label="House Type" value={houseType} />}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Identity Details ── */}
+            <div className="mb-6">
+              <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
+                3. Identity Proof
+              </h3>
+              <table className="w-full">
+                <tbody>
                   <Row
                     label="Aadhaar No."
                     value={
@@ -351,6 +394,24 @@ export function SanctionLetterPage() {
                     }
                   />
                   <Row label="PAN No." value={pan || "N/A"} />
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Work & Income ── */}
+            <div className="mb-6">
+              <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
+                4. Work &amp; Income Details
+              </h3>
+              <table className="w-full">
+                <tbody>
+                  <Row label="Occupation" value={occupation} />
+                  {workplaceName && (
+                    <Row label="Workplace / Shop Name" value={workplaceName} />
+                  )}
+                  {workAddress && (
+                    <Row label="Work Address" value={workAddress} />
+                  )}
                   <Row label="Monthly Income" value={formatINR(income)} />
                 </tbody>
               </table>
@@ -359,7 +420,7 @@ export function SanctionLetterPage() {
             {/* ── Loan Details Table ── */}
             <div className="mb-6">
               <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
-                Sanctioned Loan Details
+                5. Sanctioned Loan Details
               </h3>
               <div className="bg-navy-50 rounded-lg overflow-hidden border border-navy-100">
                 <table className="w-full">
@@ -379,6 +440,9 @@ export function SanctionLetterPage() {
                         label: "Sanctioned Amount",
                         value: formatINR(loanAmt),
                       },
+                      ...(loanPurpose
+                        ? [{ label: "Loan Purpose", value: loanPurpose }]
+                        : []),
                       { label: "Interest Rate", value: intRate },
                       { label: "Loan Tenure", value: tenure },
                       { label: "Monthly EMI", value: formatINR(emi) },
@@ -406,7 +470,7 @@ export function SanctionLetterPage() {
             {(appData?.guarantor1Name || appData?.guarantor2Name) && (
               <div className="mb-6">
                 <h3 className="font-display text-base font-bold text-navy-900 mb-3 pb-2 border-b-2 border-navy-900">
-                  Guarantor Details
+                  6. Guarantor / Reference Details
                 </h3>
                 <div className="grid sm:grid-cols-2 gap-4">
                   {appData?.guarantor1Name && (
@@ -454,6 +518,20 @@ export function SanctionLetterPage() {
                 </div>
               </div>
             )}
+
+            {/* ── Declaration ── */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="font-display text-base font-bold text-navy-900 mb-2">
+                7. Declaration
+              </h3>
+              <p className="font-body text-sm text-gray-700 leading-relaxed italic">
+                I confirm that all the above information is correct and I agree
+                to repay the loan as per terms.
+              </p>
+              <p className="font-body text-xs text-gray-500 mt-2">
+                Declaration Date: <strong>{declarationDate}</strong>
+              </p>
+            </div>
 
             {/* ── Terms & Conditions ── */}
             <div className="mb-8">
@@ -504,39 +582,31 @@ export function SanctionLetterPage() {
                   </p>
                 </div>
 
-                {/* CEO */}
+                {/* Authorized Signatory 1 */}
                 <div className="text-center">
-                  <div className="h-16 border-b-2 border-navy-900 mb-2 flex items-end justify-center pb-1">
-                    <p className="font-display text-lg font-bold text-navy-800 italic">
-                      Sawan S.
-                    </p>
-                  </div>
+                  <div className="h-16 border-b-2 border-navy-900 mb-2" />
                   <p className="font-body text-xs font-semibold text-navy-900">
                     Authorized Signatory
                   </p>
-                  <p className="font-body text-xs text-gold-600 mt-0.5">
-                    Sawan Solanki
-                  </p>
-                  <p className="font-body text-xs text-gray-500">
+                  <p className="font-body text-xs text-gray-500 mt-0.5">
                     CEO — JMD FinCap
+                  </p>
+                  <p className="font-body text-xs text-gray-400">
+                    Date: ______
                   </p>
                 </div>
 
-                {/* Co-Founder */}
+                {/* Authorized Signatory 2 */}
                 <div className="text-center">
-                  <div className="h-16 border-b-2 border-navy-900 mb-2 flex items-end justify-center pb-1">
-                    <p className="font-display text-lg font-bold text-navy-800 italic">
-                      Sawan C.
-                    </p>
-                  </div>
+                  <div className="h-16 border-b-2 border-navy-900 mb-2" />
                   <p className="font-body text-xs font-semibold text-navy-900">
                     Authorized Signatory
                   </p>
-                  <p className="font-body text-xs text-gold-600 mt-0.5">
-                    Sawan Chouhan
-                  </p>
-                  <p className="font-body text-xs text-gray-500">
+                  <p className="font-body text-xs text-gray-500 mt-0.5">
                     Co-Founder — JMD FinCap
+                  </p>
+                  <p className="font-body text-xs text-gray-400">
+                    Date: ______
                   </p>
                 </div>
               </div>
@@ -558,7 +628,7 @@ export function SanctionLetterPage() {
           <div className="bg-navy-900 px-12 py-4 mt-4">
             <p className="font-body text-xs text-white/50 text-center">
               JMD FinCap | Bistan Road, Khargone, Madhya Pradesh — 451001 |
-              contact.jmdfincap@gmail.com | +91 73546 96765
+              contact.jmdfincap@gmail.com | +91 88899 56204
             </p>
             <p className="font-body text-xs text-white/30 text-center mt-1">
               This is a computer-generated letter. For any queries, please

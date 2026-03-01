@@ -173,7 +173,7 @@ export function AdminLogin() {
             className="flex justify-center mb-6"
           >
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+              src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
               alt="JMD FinCap"
               className="h-14 w-auto object-contain"
             />

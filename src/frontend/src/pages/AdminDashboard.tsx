@@ -23,6 +23,7 @@ import { useActor } from "@/hooks/useActor";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   Ban,
   Building2,
   Calendar,
@@ -42,6 +43,7 @@ import {
   LogOut,
   Menu,
   MinusCircle,
+  Phone,
   RefreshCw,
   Search,
   Shield,
@@ -546,6 +548,210 @@ function DocIndicator({
   );
 }
 
+// ─── Loan Review Modal ───────────────────────────────────────────────────────
+
+function LoanReviewModal({
+  app,
+  rawApp,
+  onConfirm,
+  onCancel,
+  isLoading,
+}: {
+  app: LoanApplication;
+  rawApp: Record<string, unknown>;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isLoading: boolean;
+}) {
+  const name =
+    (rawApp.fullName as string) || `${app.firstName} ${app.lastName}`.trim();
+  const mobile1 = (rawApp.mobile1 as string) || "";
+  const mobile2 = (rawApp.mobile2 as string) || "";
+  const currentAddress = (rawApp.currentAddress as string) || "";
+  const occupation = (rawApp.occupation as string) || app.employeeType || "";
+  const loanAmt = app.loanAmount
+    ? `₹${Number(app.loanAmount).toLocaleString("en-IN")}`
+    : "—";
+  const income = app.monthlyIncome
+    ? `₹${Number(app.monthlyIncome).toLocaleString("en-IN")}`
+    : "—";
+  const aadhaar = (rawApp.aadhaarNumber as string) || app.aadharNumber || "";
+  const masked =
+    aadhaar.length >= 8
+      ? `${aadhaar.slice(0, 4)} •••• ${aadhaar.slice(-4)}`
+      : aadhaar;
+
+  return (
+    <dialog
+      open
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent border-0 max-w-none w-full h-full m-0"
+      aria-label="Review before approve"
+    >
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click closes modal, keyboard users use the Close button */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.93 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.93 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden z-10"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-navy-900">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-gold-500/20 flex items-center justify-center">
+              <AlertTriangle className="h-4 w-4 text-gold-400" />
+            </div>
+            <div>
+              <div className="font-body text-sm font-semibold text-white">
+                Review Before Approving
+              </div>
+              <div className="font-body text-xs text-white/50">
+                Please verify all details carefully
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6 space-y-4">
+          {/* Personal */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Personal Details
+            </div>
+            <DetailRow label="Full Name" value={name} />
+            <DetailRow
+              label="Father / Husband"
+              value={
+                (rawApp.fatherHusbandName as string) || app.fatherName || "—"
+              }
+            />
+            <DetailRow label="Date of Birth" value={app.dateOfBirth || "—"} />
+            {mobile1 && (
+              <DetailRow
+                label="Mobile 1"
+                value={mobile1}
+                icon={<Phone className="h-3 w-3" />}
+              />
+            )}
+            {mobile2 && (
+              <DetailRow
+                label="Mobile 2"
+                value={mobile2}
+                icon={<Phone className="h-3 w-3" />}
+              />
+            )}
+            {currentAddress && (
+              <DetailRow label="Address" value={currentAddress} />
+            )}
+          </div>
+
+          {/* Identity */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Identity & Work
+            </div>
+            <DetailRow label="Aadhaar" value={masked} mono />
+            <DetailRow label="PAN" value={app.panNumber || "N/A"} mono />
+            <DetailRow label="Occupation" value={occupation} />
+            <DetailRow label="Monthly Income" value={income} />
+          </div>
+
+          {/* Loan */}
+          <div className="bg-green-50 rounded-xl p-4 border border-green-200 space-y-3">
+            <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">
+              Loan Details
+            </div>
+            <DetailRow label="Loan Amount" value={loanAmt} highlight />
+            <DetailRow
+              label="Duration"
+              value={(rawApp.loanDuration as string) || app.tenure || "—"}
+            />
+            <DetailRow
+              label="Interest Rate"
+              value={(rawApp.interestRate as string) || "N/A"}
+            />
+            <DetailRow
+              label="Monthly EMI"
+              value={
+                (rawApp.monthlyEMI as string)
+                  ? `₹${Number(rawApp.monthlyEMI).toLocaleString("en-IN")}`
+                  : "—"
+              }
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end bg-gray-50">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            className="font-body text-xs border-gray-200 text-gray-600"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
+          >
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ThumbsUp className="h-3.5 w-3.5" />
+            )}
+            Confirm Approve
+          </Button>
+        </div>
+      </motion.div>
+    </dialog>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono = false,
+  highlight = false,
+  icon,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="font-body text-xs text-gray-500 shrink-0 w-28">
+        {label}
+      </span>
+      <span
+        className={`font-body text-xs text-right ${mono ? "font-mono" : "font-medium"} ${highlight ? "text-green-700 font-bold" : "text-navy-900"} flex items-center gap-1`}
+      >
+        {icon}
+        {value || "—"}
+      </span>
+    </div>
+  );
+}
+
 // ─── Loan Application Card ────────────────────────────────────────────────────
 
 function LoanApplicationCard({
@@ -568,18 +774,26 @@ function LoanApplicationCard({
     title: string;
     dataUrl: string;
   } | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
-  // Get document data from localStorage (stored during loan approval or submission)
+  // Get raw app data (includes all fields including mobile, documents etc.)
+  const rawApp = app as unknown as Record<string, unknown>;
+
   const appId =
-    ((app as unknown as Record<string, unknown>).id as string) ??
-    `${app.firstName}-${String(app.timestamp)}`;
+    (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
 
   // Try to read full app data (with base64 files) from localStorage
-  const storedAppData = (() => {
+  // Documents are stored separately under jmd_docs_<id> to avoid quota issues
+  const storedDocs = (() => {
     try {
+      // New format: documents stored separately per application ID
+      const separateDocs = localStorage.getItem(`jmd_docs_${appId}`);
+      if (separateDocs)
+        return JSON.parse(separateDocs) as Record<string, string>;
+      // Legacy format: documents embedded in the application object
       const raw = localStorage.getItem(`jmd_approved_loan_${appId}`);
       if (raw) return JSON.parse(raw) as Record<string, string>;
-      // Also check the general loan applications store
+      // Also check the general loan applications store (legacy)
       const allApps = JSON.parse(
         localStorage.getItem("jmd_loan_applications") ?? "[]",
       ) as Record<string, string>[];
@@ -589,10 +803,40 @@ function LoanApplicationCard({
     }
   })();
 
-  const maskedAadhar =
-    app.aadharNumber.length >= 8
-      ? `${app.aadharNumber.slice(0, 4)} •••• ${app.aadharNumber.slice(-4)}`
-      : app.aadharNumber;
+  // Resolve document URLs -- check rawApp first, then separate docs store
+  const resolveDoc = (...keys: string[]): string => {
+    for (const key of keys) {
+      // Check rawApp (spread extra fields from localStorage)
+      const fromRaw = rawApp[key] as string;
+      if (fromRaw?.startsWith("data:")) return fromRaw;
+      // Check separate docs storage
+      const fromDocs = storedDocs?.[key] as string;
+      if (fromDocs?.startsWith("data:")) return fromDocs;
+    }
+    return "";
+  };
+
+  const aadhaarDocUrl = resolveDoc(
+    "aadhaarCardFile",
+    "aadharCardFile",
+    "aadhaar_card",
+  );
+  const panDocUrl = resolveDoc("panCardFile", "pan_card");
+  const photoUrl = resolveDoc("customerPhoto", "photoFile", "photo");
+  const signatureUrl = resolveDoc(
+    "customerSignature",
+    "signatureFile",
+    "signature",
+  );
+
+  // Mobile numbers
+  const mobile1 = (rawApp.mobile1 as string) || "";
+  const mobile2 = (rawApp.mobile2 as string) || "";
+
+  const maskedAadhar = (() => {
+    const num = (rawApp.aadhaarNumber as string) || app.aadharNumber || "";
+    return num.length >= 8 ? `${num.slice(0, 4)} •••• ${num.slice(-4)}` : num;
+  })();
 
   const formattedAmount = Number.isNaN(Number(app.loanAmount))
     ? app.loanAmount
@@ -605,9 +849,7 @@ function LoanApplicationCard({
   const isThisLoading = actionLoading === appId;
 
   // Determine status: prefer backend status field, then local override
-  const backendStatus = (app as unknown as Record<string, unknown>).status as
-    | string
-    | undefined;
+  const backendStatus = rawApp.status as string | undefined;
   const effectiveStatus: "pending" | "approved" | "rejected" =
     localStatus ??
     (backendStatus === "approved"
@@ -633,12 +875,35 @@ function LoanApplicationCard({
           </div>
           <div>
             <div className="font-body text-base font-semibold text-navy-900">
-              {app.firstName} {app.lastName}
+              {(rawApp.fullName as string) ||
+                `${app.firstName} ${app.lastName}`}
             </div>
             <div className="font-body text-xs text-gray-400 mt-0.5">
               DOB: {app.dateOfBirth} &nbsp;·&nbsp;{" "}
               {formatTimestamp(app.timestamp)}
             </div>
+            {mobile1 && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <Phone className="h-3 w-3 text-gray-400" />
+                <a
+                  href={`tel:${mobile1}`}
+                  className="font-body text-xs text-gold-600 hover:text-gold-500 font-mono"
+                >
+                  {mobile1}
+                </a>
+                {mobile2 && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <a
+                      href={`tel:${mobile2}`}
+                      className="font-body text-xs text-gold-600 hover:text-gold-500 font-mono"
+                    >
+                      {mobile2}
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -673,10 +938,10 @@ function LoanApplicationCard({
         </div>
         <div>
           <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Tenure
+            Duration
           </div>
           <div className="font-body text-sm font-semibold text-navy-900">
-            {app.tenure} months
+            {(rawApp.loanDuration as string) || app.tenure || "—"}
           </div>
         </div>
         <div>
@@ -689,9 +954,11 @@ function LoanApplicationCard({
         </div>
         <div>
           <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Employment
+            Occupation
           </div>
-          <EmployeeBadge type={app.employeeType} />
+          <EmployeeBadge
+            type={(rawApp.occupation as string) || app.employeeType}
+          />
         </div>
       </div>
 
@@ -701,7 +968,7 @@ function LoanApplicationCard({
           <>
             <Button
               size="sm"
-              onClick={() => onApprove(app)}
+              onClick={() => setShowReviewModal(true)}
               disabled={isThisLoading}
               className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
             >
@@ -754,7 +1021,7 @@ function LoanApplicationCard({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Aadhar Number
+                Aadhaar Number
               </div>
               <div className="font-body text-sm font-mono text-navy-900">
                 {maskedAadhar}
@@ -765,38 +1032,66 @@ function LoanApplicationCard({
                 PAN Number
               </div>
               <div className="font-body text-sm font-mono text-navy-900">
-                {app.panNumber}
+                {app.panNumber || "—"}
               </div>
             </div>
           </div>
+
+          {/* Mobile numbers */}
+          {(mobile1 || mobile2) && (
+            <div className="grid grid-cols-2 gap-4">
+              {mobile1 && (
+                <div>
+                  <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                    Mobile 1
+                  </div>
+                  <div className="font-body text-sm font-mono text-navy-900">
+                    {mobile1}
+                  </div>
+                </div>
+              )}
+              {mobile2 && (
+                <div>
+                  <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                    Mobile 2
+                  </div>
+                  <div className="font-body text-sm font-mono text-navy-900">
+                    {mobile2}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Address */}
+          {(rawApp.currentAddress as string) && (
+            <div>
+              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
+                Current Address
+              </div>
+              <div className="font-body text-sm text-navy-900">
+                {rawApp.currentAddress as string}
+              </div>
+            </div>
+          )}
 
           {/* Family info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Mother's Name
+                Father / Husband
               </div>
               <div className="font-body text-sm text-navy-900">
-                {app.motherName}
+                {(rawApp.fatherHusbandName as string) || app.fatherName || "—"}
               </div>
             </div>
             <div>
               <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Father's Name
+                Loan Purpose / Occupation
               </div>
               <div className="font-body text-sm text-navy-900">
-                {app.fatherName}
+                {app.loanPurpose}
               </div>
-            </div>
-          </div>
-
-          {/* Loan purpose */}
-          <div>
-            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-              Loan Purpose
-            </div>
-            <div className="font-body text-sm text-navy-900">
-              {app.loanPurpose}
             </div>
           </div>
 
@@ -807,57 +1102,59 @@ function LoanApplicationCard({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <DocIndicator
-                label="Aadhar Card"
-                uploaded={
-                  !!(app.aadharCardFile || storedAppData?.aadhaarCardFile)
-                }
-                dataUrl={app.aadharCardFile || storedAppData?.aadhaarCardFile}
-                onView={() =>
-                  setViewerDoc({
-                    title: `Aadhaar Card — ${app.firstName} ${app.lastName}`,
-                    dataUrl:
-                      (app.aadharCardFile || storedAppData?.aadhaarCardFile) ??
-                      "",
-                  })
+                label="Aadhaar Card"
+                uploaded={!!aadhaarDocUrl}
+                dataUrl={aadhaarDocUrl}
+                onView={
+                  aadhaarDocUrl
+                    ? () =>
+                        setViewerDoc({
+                          title: `Aadhaar Card — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
+                          dataUrl: aadhaarDocUrl,
+                        })
+                    : undefined
                 }
               />
               <DocIndicator
                 label="PAN Card"
-                uploaded={!!(app.panCardFile || storedAppData?.panCardFile)}
-                dataUrl={app.panCardFile || storedAppData?.panCardFile}
-                onView={() =>
-                  setViewerDoc({
-                    title: `PAN Card — ${app.firstName} ${app.lastName}`,
-                    dataUrl:
-                      (app.panCardFile || storedAppData?.panCardFile) ?? "",
-                  })
+                uploaded={!!panDocUrl}
+                dataUrl={panDocUrl}
+                onView={
+                  panDocUrl
+                    ? () =>
+                        setViewerDoc({
+                          title: `PAN Card — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
+                          dataUrl: panDocUrl,
+                        })
+                    : undefined
                 }
               />
               <DocIndicator
                 label="Photo"
-                uploaded={!!(app.photoFile || storedAppData?.customerPhoto)}
-                dataUrl={app.photoFile || storedAppData?.customerPhoto}
-                onView={() =>
-                  setViewerDoc({
-                    title: `Customer Photo — ${app.firstName} ${app.lastName}`,
-                    dataUrl:
-                      (app.photoFile || storedAppData?.customerPhoto) ?? "",
-                  })
+                uploaded={!!photoUrl}
+                dataUrl={photoUrl}
+                onView={
+                  photoUrl
+                    ? () =>
+                        setViewerDoc({
+                          title: `Customer Photo — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
+                          dataUrl: photoUrl,
+                        })
+                    : undefined
                 }
               />
               <DocIndicator
                 label="Signature"
-                uploaded={
-                  !!(app.signatureFile || storedAppData?.customerSignature)
-                }
-                dataUrl={app.signatureFile || storedAppData?.customerSignature}
-                onView={() =>
-                  setViewerDoc({
-                    title: `Signature — ${app.firstName} ${app.lastName}`,
-                    dataUrl:
-                      (app.signatureFile || storedAppData?.customerSignature) ??
-                      "",
-                  })
+                uploaded={!!signatureUrl}
+                dataUrl={signatureUrl}
+                onView={
+                  signatureUrl
+                    ? () =>
+                        setViewerDoc({
+                          title: `Signature — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
+                          dataUrl: signatureUrl,
+                        })
+                    : undefined
                 }
               />
             </div>
@@ -873,6 +1170,22 @@ function LoanApplicationCard({
             onClose={() => setViewerDoc(null)}
             title={viewerDoc.title}
             dataUrl={viewerDoc.dataUrl}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Review Modal before Approve */}
+      <AnimatePresence>
+        {showReviewModal && (
+          <LoanReviewModal
+            app={app}
+            rawApp={rawApp}
+            onConfirm={() => {
+              setShowReviewModal(false);
+              onApprove(app);
+            }}
+            onCancel={() => setShowReviewModal(false)}
+            isLoading={isThisLoading}
           />
         )}
       </AnimatePresence>
@@ -1392,7 +1705,7 @@ export function AdminDashboard() {
             {/* Sidebar header */}
             <div className="p-6 border-b border-white/10">
               <img
-                src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+                src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
                 alt="JMD FinCap"
                 className="h-12 w-auto object-contain mb-4"
               />

@@ -462,13 +462,38 @@ export function LoanApplicationPage() {
       };
 
       // STEP 1: Save to localStorage FIRST (guaranteed to work)
+      // Save documents separately to avoid quota issues with large JSON blobs
       let savedToLocalStorage = false;
       try {
+        // Save documents separately by application ID (avoids large array quota issues)
+        const docData = {
+          aadhaarCardFile: aadhaarCardFile?.base64 ?? "",
+          panCardFile: panCardFile?.base64 ?? "",
+          customerPhoto: customerPhoto?.base64 ?? "",
+          customerSignature: customerSignature?.base64 ?? "",
+        };
+        try {
+          localStorage.setItem(`jmd_docs_${id}`, JSON.stringify(docData));
+        } catch {
+          // Quota for docs exceeded — skip doc storage, save metadata only
+        }
+
+        // Save application metadata (no large base64 files in the main array)
+        const lightApp = {
+          ...appData,
+          aadhaarCardFile: "",
+          panCardFile: "",
+          customerPhoto: "",
+          customerSignature: "",
+          aadharCardFile: "",
+          photoFile: "",
+          signatureFile: "",
+        };
         const existingRaw = localStorage.getItem("jmd_loan_applications");
         const existing = existingRaw
           ? (JSON.parse(existingRaw) as object[])
           : [];
-        existing.push(appData);
+        existing.push(lightApp);
         localStorage.setItem("jmd_loan_applications", JSON.stringify(existing));
         savedToLocalStorage = true;
         console.log(
@@ -477,36 +502,8 @@ export function LoanApplicationPage() {
           "Total:",
           existing.length,
         );
-      } catch {
-        // localStorage quota exceeded — save without large file attachments
-        try {
-          const lightApp = {
-            ...appData,
-            aadhaarCardFile: "",
-            panCardFile: "",
-            customerPhoto: "",
-            customerSignature: "",
-            aadharCardFile: "",
-            photoFile: "",
-            signatureFile: "",
-          };
-          const existingRaw2 = localStorage.getItem("jmd_loan_applications");
-          const existing2 = existingRaw2
-            ? (JSON.parse(existingRaw2) as object[])
-            : [];
-          existing2.push(lightApp);
-          localStorage.setItem(
-            "jmd_loan_applications",
-            JSON.stringify(existing2),
-          );
-          savedToLocalStorage = true;
-          console.log(
-            "[JMD] Loan application saved (without files) to localStorage:",
-            id,
-          );
-        } catch (err2) {
-          console.error("[JMD] Failed to save to localStorage:", err2);
-        }
+      } catch (err) {
+        console.error("[JMD] Failed to save to localStorage:", err);
       }
 
       if (!savedToLocalStorage) {
@@ -573,7 +570,7 @@ export function LoanApplicationPage() {
         <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center">
           <a href="/" className="flex items-center gap-3">
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+              src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
               alt="JMD FinCap"
               className="h-12 w-auto object-contain"
             />
@@ -674,7 +671,7 @@ export function LoanApplicationPage() {
       <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center justify-between sticky top-0 z-40">
         <a href="/" className="flex items-center gap-3">
           <img
-            src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+            src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
             alt="JMD FinCap"
             className="h-10 w-auto object-contain"
           />

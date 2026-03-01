@@ -130,7 +130,7 @@ function Navbar() {
           aria-label="JMD FinCap — Go to top"
         >
           <img
-            src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+            src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
             alt="JMD FinCap logo"
             className="h-12 w-auto object-contain"
           />
@@ -709,8 +709,8 @@ function ContactSection() {
                 {
                   icon: Phone,
                   label: "WhatsApp / Call",
-                  value: "+91 73546 96765",
-                  href: "tel:+917354696765",
+                  value: "+91 88899 56204",
+                  href: "tel:+918889956204",
                 },
                 {
                   icon: Mail,
@@ -927,7 +927,7 @@ function Footer() {
           {/* Brand */}
           <div>
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
+              src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
               alt="JMD FinCap"
               className="h-14 w-auto mb-4 object-contain"
             />
@@ -939,8 +939,8 @@ function Footer() {
               {[
                 {
                   icon: Phone,
-                  text: "+91 73546 96765",
-                  href: "tel:+917354696765",
+                  text: "+91 88899 56204",
+                  href: "tel:+918889956204",
                 },
                 {
                   icon: Mail,
@@ -1015,7 +1015,7 @@ function Footer() {
               ))}
             </ul>
             <a
-              href="https://wa.me/917354696765?text=Hello%20JMD%20FinCap%2C%20I%20need%20financial%20advice"
+              href="https://wa.me/918889956204?text=Hello%20JMD%20FinCap%2C%20I%20need%20financial%20advice"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-[#25D366] text-white font-body text-sm font-semibold hover:bg-[#1ebe5d] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -1053,7 +1053,7 @@ function Footer() {
 function WhatsAppButton() {
   return (
     <a
-      href="https://wa.me/917354696765?text=Hello%20JMD%20FinCap%2C%20I%20need%20financial%20advice"
+      href="https://wa.me/918889956204?text=Hello%20JMD%20FinCap%2C%20I%20need%20financial%20advice"
       target="_blank"
       rel="noopener noreferrer"
       className="fixed bottom-6 right-6 z-50 group"
@@ -1221,14 +1221,14 @@ function AIChatWidget() {
               setIsTyping(false);
               addMessage(
                 "bot",
-                "Sorry, there was an error submitting your enquiry. Please call us directly at +91 73546 96765 or WhatsApp us.",
+                "Sorry, there was an error submitting your enquiry. Please call us directly at +91 88899 56204 or WhatsApp us.",
               );
             } finally {
               setIsSubmitting(false);
             }
           } else {
             simulateBotReply(
-              "No problem! Please type 'Yes' to submit or feel free to contact us directly at +91 73546 96765.",
+              "No problem! Please type 'Yes' to submit or feel free to contact us directly at +91 88899 56204.",
             );
           }
           break;
