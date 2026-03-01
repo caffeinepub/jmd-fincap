@@ -173,12 +173,9 @@ export function AdminLogin() {
             className="flex justify-center mb-6"
           >
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
+              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
               alt="JMD FinCap"
-              className="h-14 w-auto object-contain rounded"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
+              className="h-14 w-auto object-contain"
             />
           </motion.div>
 

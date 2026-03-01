@@ -34,6 +34,7 @@ import {
   Crown,
   Download,
   ExternalLink,
+  Eye,
   FileText,
   Inbox,
   LayoutDashboard,
@@ -50,6 +51,7 @@ import {
   Users,
   Wallet,
   X,
+  ZoomIn,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -354,24 +356,160 @@ function EmployeeBadge({ type }: { type: string }) {
   );
 }
 
+// ─── Document Viewer Modal ────────────────────────────────────────────────────
+
+function DocumentViewerModal({
+  isOpen,
+  onClose,
+  title,
+  dataUrl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  dataUrl: string;
+}) {
+  if (!isOpen) return null;
+
+  const isPdf = dataUrl.startsWith("data:application/pdf");
+  const isImage = dataUrl.startsWith("data:image");
+
+  const handleDownload = () => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = title.replace(/\s+/g, "_").toLowerCase();
+    a.click();
+  };
+
+  return (
+    <dialog
+      open
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent border-0 max-w-none w-full h-full m-0"
+      aria-label={title}
+    >
+      {/* Backdrop */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click closes modal */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.92 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden z-10"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-navy-900 flex items-center justify-center">
+              <FileText className="h-4 w-4 text-gold-500" />
+            </div>
+            <div>
+              <div className="font-body text-sm font-semibold text-navy-900">
+                {title}
+              </div>
+              <div className="font-body text-xs text-gray-400">
+                {isPdf ? "PDF Document" : "Image"}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold bg-navy-900 text-gold-500 hover:bg-navy-700 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-navy-900 hover:bg-gray-100 transition-colors"
+              aria-label="Close viewer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4 bg-gray-50 flex items-center justify-center min-h-0">
+          {isImage ? (
+            <img
+              src={dataUrl}
+              alt={title}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+            />
+          ) : isPdf ? (
+            <iframe
+              src={dataUrl}
+              title={title}
+              className="w-full h-[500px] rounded-lg border border-gray-200"
+            />
+          ) : (
+            <div className="text-center py-12">
+              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="font-body text-sm text-gray-500">
+                Preview not available for this file type.
+              </p>
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="mt-3 font-body text-sm text-gold-600 hover:text-gold-500 underline"
+              >
+                Download to view
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </dialog>
+  );
+}
+
 // ─── Document Indicator ───────────────────────────────────────────────────────
 
 function DocIndicator({
   label,
   uploaded,
-}: { label: string; uploaded: boolean }) {
+  dataUrl,
+  onView,
+}: {
+  label: string;
+  uploaded: boolean;
+  dataUrl?: string;
+  onView?: () => void;
+}) {
   return (
-    <div className="flex items-center gap-1.5">
-      {uploaded ? (
-        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-      ) : (
-        <MinusCircle className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        {uploaded ? (
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+        ) : (
+          <MinusCircle className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+        )}
+        <span
+          className={`font-body text-xs ${uploaded ? "text-green-600" : "text-gray-400"}`}
+        >
+          {label}
+        </span>
+      </div>
+      {uploaded && dataUrl && onView && (
+        <button
+          type="button"
+          onClick={onView}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md font-body text-xs font-semibold bg-navy-900 text-gold-500 hover:bg-navy-700 transition-colors w-fit"
+        >
+          <Eye className="h-3 w-3" />
+          View
+        </button>
       )}
-      <span
-        className={`font-body text-xs ${uploaded ? "text-green-600" : "text-gray-400"}`}
-      >
-        {label}
-      </span>
     </div>
   );
 }
@@ -394,6 +532,30 @@ function LoanApplicationCard({
   localStatus?: "pending" | "approved" | "rejected";
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState<{
+    title: string;
+    dataUrl: string;
+  } | null>(null);
+
+  // Get document data from localStorage (stored during loan approval or submission)
+  const appId =
+    ((app as unknown as Record<string, unknown>).id as string) ??
+    `${app.firstName}-${String(app.timestamp)}`;
+
+  // Try to read full app data (with base64 files) from localStorage
+  const storedAppData = (() => {
+    try {
+      const raw = localStorage.getItem(`jmd_approved_loan_${appId}`);
+      if (raw) return JSON.parse(raw) as Record<string, string>;
+      // Also check the general loan applications store
+      const allApps = JSON.parse(
+        localStorage.getItem("jmd_loan_applications") ?? "[]",
+      ) as Record<string, string>[];
+      return allApps.find((a) => a.id === appId) ?? null;
+    } catch {
+      return null;
+    }
+  })();
 
   const maskedAadhar =
     app.aadharNumber.length >= 8
@@ -408,9 +570,6 @@ function LoanApplicationCard({
     ? app.monthlyIncome
     : `₹${Number(app.monthlyIncome).toLocaleString("en-IN")}`;
 
-  const appId =
-    ((app as unknown as Record<string, unknown>).id as string) ??
-    `${app.firstName}-${String(app.timestamp)}`;
   const isThisLoading = actionLoading === appId;
 
   // Determine status: prefer backend status field, then local override
@@ -611,21 +770,80 @@ function LoanApplicationCard({
 
           {/* Documents uploaded */}
           <div>
-            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-3">
               Documents Uploaded
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <DocIndicator
                 label="Aadhar Card"
-                uploaded={!!app.aadharCardFile}
+                uploaded={
+                  !!(app.aadharCardFile || storedAppData?.aadhaarCardFile)
+                }
+                dataUrl={app.aadharCardFile || storedAppData?.aadhaarCardFile}
+                onView={() =>
+                  setViewerDoc({
+                    title: `Aadhaar Card — ${app.firstName} ${app.lastName}`,
+                    dataUrl:
+                      (app.aadharCardFile || storedAppData?.aadhaarCardFile) ??
+                      "",
+                  })
+                }
               />
-              <DocIndicator label="PAN Card" uploaded={!!app.panCardFile} />
-              <DocIndicator label="Photo" uploaded={!!app.photoFile} />
-              <DocIndicator label="Signature" uploaded={!!app.signatureFile} />
+              <DocIndicator
+                label="PAN Card"
+                uploaded={!!(app.panCardFile || storedAppData?.panCardFile)}
+                dataUrl={app.panCardFile || storedAppData?.panCardFile}
+                onView={() =>
+                  setViewerDoc({
+                    title: `PAN Card — ${app.firstName} ${app.lastName}`,
+                    dataUrl:
+                      (app.panCardFile || storedAppData?.panCardFile) ?? "",
+                  })
+                }
+              />
+              <DocIndicator
+                label="Photo"
+                uploaded={!!(app.photoFile || storedAppData?.customerPhoto)}
+                dataUrl={app.photoFile || storedAppData?.customerPhoto}
+                onView={() =>
+                  setViewerDoc({
+                    title: `Customer Photo — ${app.firstName} ${app.lastName}`,
+                    dataUrl:
+                      (app.photoFile || storedAppData?.customerPhoto) ?? "",
+                  })
+                }
+              />
+              <DocIndicator
+                label="Signature"
+                uploaded={
+                  !!(app.signatureFile || storedAppData?.customerSignature)
+                }
+                dataUrl={app.signatureFile || storedAppData?.customerSignature}
+                onView={() =>
+                  setViewerDoc({
+                    title: `Signature — ${app.firstName} ${app.lastName}`,
+                    dataUrl:
+                      (app.signatureFile || storedAppData?.customerSignature) ??
+                      "",
+                  })
+                }
+              />
             </div>
           </div>
         </div>
       )}
+
+      {/* Document Viewer Modal */}
+      <AnimatePresence>
+        {viewerDoc && (
+          <DocumentViewerModal
+            isOpen={!!viewerDoc}
+            onClose={() => setViewerDoc(null)}
+            title={viewerDoc.title}
+            dataUrl={viewerDoc.dataUrl}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1010,12 +1228,9 @@ export function AdminDashboard() {
             {/* Sidebar header */}
             <div className="p-6 border-b border-white/10">
               <img
-                src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
+                src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
                 alt="JMD FinCap"
-                className="h-12 w-auto object-contain mb-4 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
+                className="h-12 w-auto object-contain mb-4"
               />
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">

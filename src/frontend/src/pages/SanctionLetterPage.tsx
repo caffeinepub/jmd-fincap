@@ -247,12 +247,9 @@ export function SanctionLetterPage() {
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
+                  src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
                   alt="JMD FinCap"
-                  className="h-16 w-auto object-contain rounded"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
+                  className="h-16 w-auto object-contain"
                 />
                 <div>
                   <h1 className="font-display text-2xl font-bold text-navy-900 leading-tight">

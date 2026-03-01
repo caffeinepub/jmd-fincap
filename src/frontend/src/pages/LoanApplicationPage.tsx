@@ -306,6 +306,10 @@ export function LoanApplicationPage() {
   const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [panNumber, setPanNumber] = useState("");
   const [customerPhoto, setCustomerPhoto] = useState<FilePreview | null>(null);
+  const [aadhaarCardFile, setAadhaarCardFile] = useState<FilePreview | null>(
+    null,
+  );
+  const [panCardFile, setPanCardFile] = useState<FilePreview | null>(null);
 
   // ── Section 4: Work & Income ──
   const [occupation, setOccupation] = useState("");
@@ -415,6 +419,8 @@ export function LoanApplicationPage() {
         houseType,
         aadhaarNumber,
         panNumber,
+        aadhaarCardFile: aadhaarCardFile?.base64 ?? "",
+        panCardFile: panCardFile?.base64 ?? "",
         occupation,
         workplaceName,
         workAddress,
@@ -466,8 +472,8 @@ export function LoanApplicationPage() {
           loanAmount,
           monthlyIncome,
           occupation,
-          "", // aadharCardFile
-          "", // panCardFile
+          aadhaarCardFile?.base64 ?? "", // aadharCardFile
+          panCardFile?.base64 ?? "", // panCardFile
           customerPhoto?.base64 ?? "",
           customerSignature?.base64 ?? "",
         );
@@ -508,13 +514,9 @@ export function LoanApplicationPage() {
         <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center">
           <a href="/" className="flex items-center gap-3">
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
+              src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
               alt="JMD FinCap"
-              className="h-12 w-auto object-contain rounded"
-              onError={(e) => {
-                const el = e.target as HTMLImageElement;
-                el.style.display = "none";
-              }}
+              className="h-12 w-auto object-contain"
             />
             <span className="font-display text-xl font-bold text-navy-900">
               JMD FinCap
@@ -570,6 +572,8 @@ export function LoanApplicationPage() {
                   setHouseType("");
                   setAadhaarNumber("");
                   setPanNumber("");
+                  setAadhaarCardFile(null);
+                  setPanCardFile(null);
                   setCustomerPhoto(null);
                   setOccupation("");
                   setWorkplaceName("");
@@ -611,13 +615,9 @@ export function LoanApplicationPage() {
       <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center justify-between sticky top-0 z-40">
         <a href="/" className="flex items-center gap-3">
           <img
-            src="/assets/uploads/WhatsApp-Image-2026-02-28-at-22.30.21-1.jpeg"
+            src="/assets/uploads/WhatsApp-Image-2026-02-28-at-21.00.20-1.png"
             alt="JMD FinCap"
-            className="h-10 w-auto object-contain rounded"
-            onError={(e) => {
-              const el = e.target as HTMLImageElement;
-              el.style.display = "none";
-            }}
+            className="h-10 w-auto object-contain"
           />
           <span className="font-display text-lg font-bold text-navy-900 hidden sm:block">
             JMD FinCap
@@ -882,16 +882,38 @@ export function LoanApplicationPage() {
                           Format: ABCDE1234F
                         </p>
                       </Field>
-                      <div className="sm:col-span-2">
-                        <FileUploadField
-                          id="customerPhoto"
-                          label="Customer Photo"
-                          accept="image/*"
-                          value={customerPhoto}
-                          onChange={setCustomerPhoto}
-                          hint="Clear passport-size photo (JPG, PNG)"
-                          required
-                        />
+                      <div className="sm:col-span-2 border-t border-gray-100 pt-5 mt-2">
+                        <p className="font-body text-sm font-semibold text-navy-900 mb-4">
+                          Document Uploads
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-5">
+                          <FileUploadField
+                            id="aadhaarCardFile"
+                            label="Aadhaar Card Upload"
+                            accept="image/*,application/pdf"
+                            value={aadhaarCardFile}
+                            onChange={setAadhaarCardFile}
+                            hint="Front & back photo of Aadhaar card (JPG, PNG, PDF)"
+                            required
+                          />
+                          <FileUploadField
+                            id="panCardFile"
+                            label="PAN Card Upload"
+                            accept="image/*,application/pdf"
+                            value={panCardFile}
+                            onChange={setPanCardFile}
+                            hint="Clear photo of PAN card (JPG, PNG, PDF)"
+                          />
+                          <FileUploadField
+                            id="customerPhoto"
+                            label="Customer Photo"
+                            accept="image/*"
+                            value={customerPhoto}
+                            onChange={setCustomerPhoto}
+                            hint="Clear passport-size photo (JPG, PNG)"
+                            required
+                          />
+                        </div>
                       </div>
                     </div>
                   </>
