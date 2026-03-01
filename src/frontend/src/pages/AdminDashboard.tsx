@@ -735,35 +735,30 @@ export function AdminDashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Check session token validity on mount
+  // Check session validity on mount — local-only, no backend call
   useEffect(() => {
-    if (!session) {
+    const stored = localStorage.getItem("adminSession");
+    if (!stored) {
       void navigate({ to: "/admin/login" });
+      setSessionChecking(false);
       return;
     }
-    if (!actor || actorFetching) return;
-
-    setSessionChecking(true);
-    actor
-      .validateAdminSession(sessionToken)
-      .then((valid) => {
-        if (!valid) {
-          localStorage.removeItem("adminSession");
-          localStorage.removeItem("jmd_admin_token");
-          void navigate({ to: "/admin/login" });
-        } else {
-          setSessionValid(true);
-        }
-      })
-      .catch(() => {
+    try {
+      const parsed = JSON.parse(stored) as SessionData;
+      if (!parsed.token || !parsed.role) {
         localStorage.removeItem("adminSession");
         localStorage.removeItem("jmd_admin_token");
         void navigate({ to: "/admin/login" });
-      })
-      .finally(() => {
-        setSessionChecking(false);
-      });
-  }, [actor, actorFetching, navigate, session, sessionToken]);
+      } else {
+        setSessionValid(true);
+      }
+    } catch {
+      localStorage.removeItem("adminSession");
+      localStorage.removeItem("jmd_admin_token");
+      void navigate({ to: "/admin/login" });
+    }
+    setSessionChecking(false);
+  }, [navigate]);
 
   // Fetch contact submissions
   const {
@@ -879,8 +874,8 @@ export function AdminDashboard() {
     }
     localStorage.removeItem("adminSession");
     localStorage.removeItem("jmd_admin_token");
-    void navigate({ to: "/" });
-  }, [actor, navigate, sessionToken]);
+    window.location.href = "/";
+  }, [actor, sessionToken]);
 
   // ─── Approve / Reject Loan ───────────────────────────────────────────────────
 

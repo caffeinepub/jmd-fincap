@@ -126,7 +126,8 @@ export function AdminLogin() {
     localStorage.setItem("adminSession", JSON.stringify(session));
     localStorage.setItem("jmd_admin_token", session.token);
     setIsLoading(false);
-    void navigate({ to: "/admin" });
+    // Hard redirect to ensure session is read fresh on the dashboard
+    window.location.href = "/admin";
   };
 
   return (
