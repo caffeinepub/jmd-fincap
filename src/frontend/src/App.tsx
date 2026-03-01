@@ -130,7 +130,7 @@ function Navbar() {
           aria-label="JMD FinCap — Go to top"
         >
           <img
-            src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+            src="/assets/generated/jmd-fincap-logo-main.png"
             alt="JMD FinCap logo"
             className="h-12 w-auto object-contain"
           />
@@ -927,7 +927,7 @@ function Footer() {
           {/* Brand */}
           <div>
             <img
-              src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+              src="/assets/generated/jmd-fincap-logo-main.png"
               alt="JMD FinCap"
               className="h-14 w-auto mb-4 object-contain"
             />

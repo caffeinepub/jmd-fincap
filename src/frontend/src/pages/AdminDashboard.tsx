@@ -786,10 +786,25 @@ function LoanApplicationCard({
   // Documents are stored separately under jmd_docs_<id> to avoid quota issues
   const storedDocs = (() => {
     try {
-      // New format: documents stored separately per application ID
+      // New format: documents stored together per application ID
       const separateDocs = localStorage.getItem(`jmd_docs_${appId}`);
       if (separateDocs)
         return JSON.parse(separateDocs) as Record<string, string>;
+
+      // Individual document keys fallback (when combined save failed due to quota)
+      const aadhaar = localStorage.getItem(`jmd_doc_aadhaar_${appId}`);
+      const pan = localStorage.getItem(`jmd_doc_pan_${appId}`);
+      const photo = localStorage.getItem(`jmd_doc_photo_${appId}`);
+      const signature = localStorage.getItem(`jmd_doc_signature_${appId}`);
+      if (aadhaar ?? pan ?? photo ?? signature) {
+        const individualDocs: Record<string, string> = {};
+        if (aadhaar) individualDocs.aadhaarCardFile = aadhaar;
+        if (pan) individualDocs.panCardFile = pan;
+        if (photo) individualDocs.customerPhoto = photo;
+        if (signature) individualDocs.customerSignature = signature;
+        return individualDocs;
+      }
+
       // Legacy format: documents embedded in the application object
       const raw = localStorage.getItem(`jmd_approved_loan_${appId}`);
       if (raw) return JSON.parse(raw) as Record<string, string>;
@@ -1705,7 +1720,7 @@ export function AdminDashboard() {
             {/* Sidebar header */}
             <div className="p-6 border-b border-white/10">
               <img
-                src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+                src="/assets/generated/jmd-fincap-logo-main.png"
                 alt="JMD FinCap"
                 className="h-12 w-auto object-contain mb-4"
               />

@@ -260,7 +260,7 @@ export function SanctionLetterPage() {
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+                  src="/assets/generated/jmd-fincap-logo-main.png"
                   alt="JMD FinCap"
                   className="h-16 w-auto object-contain"
                 />

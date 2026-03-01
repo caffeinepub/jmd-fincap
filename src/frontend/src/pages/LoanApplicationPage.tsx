@@ -40,6 +40,43 @@ interface FilePreview {
   base64: string;
 }
 
+// ─── Image Compression Utility ───────────────────────────────────────────────
+
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard limit
+const MAX_COMPRESSED_SIZE_BYTES = 800 * 1024; // 800KB soft warning
+const COMPRESS_MAX_WIDTH = 800;
+const COMPRESS_QUALITY = 0.7;
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      if (width > COMPRESS_MAX_WIDTH) {
+        height = Math.round((height * COMPRESS_MAX_WIDTH) / width);
+        width = COMPRESS_MAX_WIDTH;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas context unavailable"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", COMPRESS_QUALITY));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image load failed"));
+    };
+    img.src = objectUrl;
+  });
+}
+
 // ─── File Upload Field ────────────────────────────────────────────────────────
 
 interface FileUploadFieldProps {
@@ -61,18 +98,53 @@ function FileUploadField({
   hint,
   required = false,
 }: FileUploadFieldProps) {
-  const handleFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = (e.target?.result as string) ?? "";
-      const isImage = file.type.startsWith("image/");
-      onChange({
-        name: file.name,
-        preview: isImage ? base64 : null,
-        base64,
-      });
-    };
-    reader.readAsDataURL(file);
+  const handleFile = async (file: File) => {
+    // Hard limit: reject files > 5MB
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      toast.error("File too large. Please use a file under 5MB.");
+      return;
+    }
+
+    const isImage = file.type.startsWith("image/");
+
+    if (isImage) {
+      try {
+        const compressed = await compressImage(file);
+        // Soft warning if still large after compression
+        const byteLength = Math.round((compressed.length * 3) / 4);
+        if (byteLength > MAX_COMPRESSED_SIZE_BYTES) {
+          toast.warning(
+            "Image is large even after compression. Consider using a smaller photo.",
+          );
+        }
+        onChange({
+          name: file.name,
+          preview: compressed,
+          base64: compressed,
+        });
+      } catch {
+        // Compression failed — fallback to raw base64
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64 = (e.target?.result as string) ?? "";
+          onChange({ name: file.name, preview: base64, base64 });
+        };
+        reader.readAsDataURL(file);
+      }
+    } else {
+      // Non-image (PDF etc.) — warn if > 1MB
+      if (file.size > 1024 * 1024) {
+        toast.warning(
+          "PDF is over 1MB. It may not save due to browser storage limits.",
+        );
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = (e.target?.result as string) ?? "";
+        onChange({ name: file.name, preview: null, base64 });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const inputId = `file-input-${id}`;
@@ -98,7 +170,7 @@ function FileUploadField({
           className="sr-only"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) handleFile(file);
+            if (file) void handleFile(file);
           }}
         />
 
@@ -472,10 +544,62 @@ export function LoanApplicationPage() {
           customerPhoto: customerPhoto?.base64 ?? "",
           customerSignature: customerSignature?.base64 ?? "",
         };
+        // Try combined save first
+        let docsSaved = false;
         try {
           localStorage.setItem(`jmd_docs_${id}`, JSON.stringify(docData));
+          docsSaved = true;
         } catch {
-          // Quota for docs exceeded — skip doc storage, save metadata only
+          // Combined save failed (quota exceeded) — try saving each document individually
+        }
+        if (!docsSaved) {
+          let anyDocSaved = false;
+          if (docData.aadhaarCardFile) {
+            try {
+              localStorage.setItem(
+                `jmd_doc_aadhaar_${id}`,
+                docData.aadhaarCardFile,
+              );
+              anyDocSaved = true;
+            } catch {
+              /* ignore */
+            }
+          }
+          if (docData.panCardFile) {
+            try {
+              localStorage.setItem(`jmd_doc_pan_${id}`, docData.panCardFile);
+              anyDocSaved = true;
+            } catch {
+              /* ignore */
+            }
+          }
+          if (docData.customerPhoto) {
+            try {
+              localStorage.setItem(
+                `jmd_doc_photo_${id}`,
+                docData.customerPhoto,
+              );
+              anyDocSaved = true;
+            } catch {
+              /* ignore */
+            }
+          }
+          if (docData.customerSignature) {
+            try {
+              localStorage.setItem(
+                `jmd_doc_signature_${id}`,
+                docData.customerSignature,
+              );
+              anyDocSaved = true;
+            } catch {
+              /* ignore */
+            }
+          }
+          if (!anyDocSaved) {
+            toast.warning(
+              "Documents could not be saved due to storage limits. Please use smaller image files.",
+            );
+          }
         }
 
         // Save application metadata (no large base64 files in the main array)
@@ -570,7 +694,7 @@ export function LoanApplicationPage() {
         <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center">
           <a href="/" className="flex items-center gap-3">
             <img
-              src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+              src="/assets/generated/jmd-fincap-logo-main.png"
               alt="JMD FinCap"
               className="h-12 w-auto object-contain"
             />
@@ -671,7 +795,7 @@ export function LoanApplicationPage() {
       <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center justify-between sticky top-0 z-40">
         <a href="/" className="flex items-center gap-3">
           <img
-            src="/assets/generated/jmd-fincap-logo-transparent.dim_300x300.png"
+            src="/assets/generated/jmd-fincap-logo-main.png"
             alt="JMD FinCap"
             className="h-10 w-auto object-contain"
           />
