@@ -246,32 +246,38 @@ function StatCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5, ease: "easeOut" }}
-      className="bg-white rounded-xl p-6 shadow-xs border border-gray-100 hover:shadow-card-hover transition-all duration-300 group"
+      className="bg-white rounded-xl shadow-xs border border-gray-100 hover:shadow-premium transition-all duration-300 group overflow-hidden"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div
-          className={`h-11 w-11 rounded-xl flex items-center justify-center group-hover:bg-gold-500 transition-colors duration-300 ${
-            accent ? "bg-gold-500" : "bg-navy-900"
-          }`}
-        >
-          <Icon
-            className={`h-5 w-5 transition-colors duration-300 group-hover:text-navy-900 ${
-              accent
-                ? "text-navy-900 group-hover:text-navy-900"
-                : "text-gold-500"
+      {/* Gold top border accent */}
+      <div
+        className={`h-[3px] w-full ${accent ? "bg-gold-500" : "bg-gradient-to-r from-gold-600 to-gold-400"}`}
+      />
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div
+            className={`h-11 w-11 rounded-xl flex items-center justify-center group-hover:bg-gold-500 transition-colors duration-300 ${
+              accent ? "bg-gold-500" : "bg-navy-900"
             }`}
-          />
+          >
+            <Icon
+              className={`h-5 w-5 transition-colors duration-300 group-hover:text-navy-900 ${
+                accent
+                  ? "text-navy-900 group-hover:text-navy-900"
+                  : "text-gold-500"
+              }`}
+            />
+          </div>
+          <div className="h-2 w-2 rounded-full bg-green-400 mt-1" />
         </div>
-        <div className="h-2 w-2 rounded-full bg-green-400 mt-1" />
+        <div className="font-display text-3xl font-bold text-navy-900 mb-1">
+          {animate && typeof numericValue === "number" ? (
+            <CountUp target={numericValue} />
+          ) : (
+            value
+          )}
+        </div>
+        <div className="font-body text-sm text-gray-500">{label}</div>
       </div>
-      <div className="font-display text-3xl font-bold text-navy-900 mb-1">
-        {animate && typeof numericValue === "number" ? (
-          <CountUp target={numericValue} />
-        ) : (
-          value
-        )}
-      </div>
-      <div className="font-body text-sm text-gray-500">{label}</div>
     </motion.div>
   );
 }
@@ -881,7 +887,7 @@ function LoanApplicationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: idx * 0.04, duration: 0.35 }}
-      className="bg-white rounded-xl border border-gray-100 shadow-xs hover:shadow-card-hover transition-all duration-300 overflow-hidden"
+      className="bg-white rounded-xl border border-gray-100 shadow-xs hover:shadow-premium transition-all duration-300 overflow-hidden"
     >
       {/* Card Header */}
       <div className="px-6 py-4 flex items-start justify-between gap-4">
@@ -1255,23 +1261,23 @@ interface LoanStatus {
 function LoanStatusBadge({ status }: LoanStatus) {
   if (status === "approved") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-green-50 text-green-700 border border-green-200">
-        <CheckCircle2 className="h-3 w-3" />
+      <span className="badge-approved">
+        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
         Approved
       </span>
     );
   }
   if (status === "rejected") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-red-50 text-red-700 border border-red-200">
-        <Ban className="h-3 w-3" />
+      <span className="badge-rejected">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
         Rejected
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-body font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-      <Clock className="h-3 w-3" />
+    <span className="badge-pending">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
       Pending
     </span>
   );
@@ -1858,9 +1864,9 @@ export function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("enquiries")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                     activeTab === "enquiries"
-                      ? "bg-gold-500/15 text-gold-500"
+                      ? "admin-sidebar-active"
                       : "text-white/60 hover:text-white hover:bg-white/10"
                   }`}
                 >
@@ -1870,9 +1876,9 @@ export function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("loans")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                     activeTab === "loans"
-                      ? "bg-gold-500/15 text-gold-500"
+                      ? "admin-sidebar-active"
                       : "text-white/60 hover:text-white hover:bg-white/10"
                   }`}
                 >
@@ -1887,9 +1893,9 @@ export function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("settings")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                     activeTab === "settings"
-                      ? "bg-gold-500/15 text-gold-500"
+                      ? "admin-sidebar-active"
                       : "text-white/60 hover:text-white hover:bg-white/10"
                   }`}
                 >
@@ -2215,7 +2221,9 @@ export function AdminDashboard() {
                         {filteredSubmissions.map((sub, idx) => (
                           <TableRow
                             key={`${sub.name}-${String(sub.timestamp)}`}
-                            className="hover:bg-navy-50/70 transition-colors duration-150 border-b border-gray-50"
+                            className={`hover:bg-gold-100/30 transition-colors duration-150 border-b border-gray-50 ${
+                              idx % 2 === 0 ? "bg-white" : "bg-navy-50/20"
+                            }`}
                           >
                             <TableCell className="font-body text-sm text-gray-400 font-mono">
                               {idx + 1}

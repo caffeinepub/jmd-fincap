@@ -25,6 +25,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
+  Bot,
   Briefcase,
   Building2,
   CheckCircle2,
@@ -32,6 +33,7 @@ import {
   Home,
   Loader2,
   MapPin,
+  MessageCircle,
   PenLine,
   Phone,
   Upload,
@@ -40,7 +42,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,10 +170,10 @@ function FileUploadField({
       </span>
       <label
         htmlFor={inputId}
-        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 cursor-pointer group block ${
+        className={`relative border-2 border-dashed rounded-2xl transition-all duration-200 cursor-pointer group block ${
           value
-            ? "border-gold-500 bg-gold-50"
-            : "border-gray-200 hover:border-gold-400 hover:bg-gold-50/30"
+            ? "border-gold-500 bg-gold-50/60"
+            : "border-gold-500/30 hover:border-gold-500 hover:bg-gold-500/5"
         }`}
       >
         <input
@@ -186,23 +188,23 @@ function FileUploadField({
         />
 
         {value ? (
-          <div className="p-4 flex items-center gap-4">
+          <div className="p-5 flex items-center gap-4">
             {value.preview ? (
               <img
                 src={value.preview}
                 alt="Preview"
-                className="h-16 w-16 object-cover rounded-lg border border-gold-200 shrink-0"
+                className="h-16 w-16 object-cover rounded-xl border-2 border-gold-200 shrink-0 shadow-sm"
               />
             ) : (
-              <div className="h-16 w-16 rounded-lg bg-navy-900 flex items-center justify-center shrink-0">
+              <div className="h-16 w-16 rounded-xl bg-navy-900 flex items-center justify-center shrink-0 shadow-sm">
                 <FileText className="h-7 w-7 text-gold-500" />
               </div>
             )}
             <div className="min-w-0">
-              <p className="font-body text-sm font-medium text-navy-900 truncate">
+              <p className="font-body text-sm font-semibold text-navy-900 truncate">
                 {value.name}
               </p>
-              <p className="font-body text-xs text-green-600 flex items-center gap-1 mt-0.5">
+              <p className="font-body text-xs text-green-600 flex items-center gap-1 mt-1 font-medium">
                 <CheckCircle2 className="h-3 w-3" /> Uploaded successfully
               </p>
               <button
@@ -211,16 +213,18 @@ function FileUploadField({
                   e.stopPropagation();
                   onChange(null);
                 }}
-                className="font-body text-xs text-red-500 hover:text-red-600 mt-1 underline focus-visible:outline-none"
+                className="font-body text-xs text-red-500 hover:text-red-600 mt-1.5 underline focus-visible:outline-none"
               >
                 Remove
               </button>
             </div>
           </div>
         ) : (
-          <div className="p-6 text-center">
-            <Upload className="h-8 w-8 text-gray-300 group-hover:text-gold-400 mx-auto mb-2 transition-colors" />
-            <p className="font-body text-sm text-gray-500 group-hover:text-navy-700 transition-colors">
+          <div className="p-8 text-center">
+            <div className="h-12 w-12 mx-auto mb-3 rounded-2xl bg-gold-100/80 group-hover:bg-gold-100 flex items-center justify-center transition-colors">
+              <Upload className="h-6 w-6 text-gold-500 group-hover:text-gold-600 transition-colors" />
+            </div>
+            <p className="font-body text-sm font-semibold text-gray-600 group-hover:text-navy-700 transition-colors">
               Click to upload
             </p>
             {hint && (
@@ -252,52 +256,85 @@ function Stepper({
 }: { currentStep: number; totalSteps: number }) {
   return (
     <div className="w-full">
-      {/* Progress bar */}
-      <div className="relative h-1.5 bg-gray-200 rounded-full mb-6">
-        <motion.div
-          className="absolute inset-y-0 left-0 bg-gold-500 rounded-full"
-          animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        />
-      </div>
-
-      {/* Steps */}
-      <div className="flex justify-between">
+      {/* Numbered step indicator */}
+      <div className="flex items-center justify-between mb-6 overflow-x-auto pb-2">
         {STEPS.map((step, idx) => {
-          const StepIcon = step.icon;
           const isCompleted = idx < currentStep;
           const isCurrent = idx === currentStep;
           return (
             <div
               key={step.label}
-              className="flex flex-col items-center gap-1"
+              className="flex items-center"
               aria-current={isCurrent ? "step" : undefined}
             >
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center transition-all duration-300 ${
-                  isCompleted
-                    ? "bg-green-500 text-white"
-                    : isCurrent
-                      ? "bg-navy-900 text-gold-500 ring-4 ring-navy-900/20"
-                      : "bg-gray-100 text-gray-400"
-                }`}
-              >
-                {isCompleted ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <StepIcon className="h-3.5 w-3.5" />
-                )}
+              {/* Circle */}
+              <div className="flex flex-col items-center gap-1.5 relative">
+                <motion.div
+                  animate={{
+                    scale: isCurrent ? 1.1 : 1,
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className={`h-9 w-9 rounded-full flex items-center justify-center text-sm font-bold font-display transition-all duration-300 shadow-sm ${
+                    isCompleted
+                      ? "bg-navy-900 text-gold-400"
+                      : isCurrent
+                        ? "bg-gold-500 text-navy-900 shadow-gold"
+                        : "bg-gray-100 text-gray-400 border-2 border-gray-200"
+                  }`}
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <span>{idx + 1}</span>
+                  )}
+                </motion.div>
+                <span
+                  className={`font-body text-[9px] font-semibold uppercase tracking-wide hidden sm:block whitespace-nowrap ${
+                    isCurrent
+                      ? "text-gold-600"
+                      : isCompleted
+                        ? "text-navy-800"
+                        : "text-gray-400"
+                  }`}
+                >
+                  {step.label}
+                </span>
               </div>
-              <span
-                className={`font-body text-[10px] font-medium hidden sm:block ${
-                  isCurrent ? "text-navy-900" : "text-gray-400"
-                }`}
-              >
-                {step.label}
-              </span>
+
+              {/* Connector line */}
+              {idx < STEPS.length - 1 && (
+                <div className="flex-1 mx-1 h-0.5 min-w-[12px]">
+                  <motion.div
+                    className={`h-full rounded-full transition-colors duration-500 ${
+                      isCompleted ? "bg-gold-500" : "bg-gray-200"
+                    }`}
+                    initial={false}
+                    animate={{ scaleX: 1 }}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+
+      {/* Progress fraction */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-body text-xs text-gray-400 font-medium">
+          Step {currentStep + 1} of {totalSteps}
+        </span>
+        <span className="font-body text-xs text-gold-600 font-semibold">
+          {Math.round(((currentStep + 1) / totalSteps) * 100)}% Complete
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="relative h-1 bg-gray-100 rounded-full">
+        <motion.div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-gold-600 to-gold-400 rounded-full"
+          animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        />
       </div>
     </div>
   );
@@ -426,6 +463,52 @@ export function LoanApplicationPage() {
   const [declarationDate, setDeclarationDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+
+  // ── AI Pre-fill from chat agent ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("prefill") === "1") {
+      try {
+        const raw = localStorage.getItem("jmd_loan_prefill");
+        if (raw) {
+          const d = JSON.parse(raw) as Record<string, string>;
+          if (d.fullName) setFullName(d.fullName);
+          if (d.fatherHusbandName) setFatherHusbandName(d.fatherHusbandName);
+          if (d.dateOfBirth) setDateOfBirth(d.dateOfBirth);
+          if (d.mobile1) setMobile1(d.mobile1);
+          if (d.mobile2) setMobile2(d.mobile2);
+          if (d.email) setEmail(d.email);
+          if (d.currentAddress) setCurrentAddress(d.currentAddress);
+          if (d.permanentAddress) setPermanentAddress(d.permanentAddress);
+          if (d.nearestLandmark) setNearestLandmark(d.nearestLandmark);
+          if (d.houseType) setHouseType(d.houseType);
+          if (d.aadhaarNumber) setAadhaarNumber(d.aadhaarNumber);
+          if (d.panNumber) setPanNumber(d.panNumber);
+          if (d.occupation) setOccupation(d.occupation);
+          if (d.workplaceName) setWorkplaceName(d.workplaceName);
+          if (d.workAddress) setWorkAddress(d.workAddress);
+          if (d.monthlyIncome) setMonthlyIncome(d.monthlyIncome);
+          if (d.loanAmount) setLoanAmount(d.loanAmount);
+          if (d.loanDuration) setLoanDuration(d.loanDuration);
+          if (d.monthlyEMI) setMonthlyEMI(d.monthlyEMI);
+          if (d.guarantor1Name) setGuarantor1Name(d.guarantor1Name);
+          if (d.guarantor1Mobile) setGuarantor1Mobile(d.guarantor1Mobile);
+          if (d.guarantor1Relation) setGuarantor1Relation(d.guarantor1Relation);
+          if (d.guarantor2Name) setGuarantor2Name(d.guarantor2Name);
+          // Clean up
+          localStorage.removeItem("jmd_loan_prefill");
+          // Remove ?prefill=1 from URL
+          window.history.replaceState({}, "", "/apply");
+          toast.success(
+            "AI Agent ne form fill kar diya! Documents upload karein aur submit karein.",
+            { duration: 5000 },
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }, []);
 
   const validateStep = (step: number): boolean => {
     switch (step) {
@@ -852,6 +935,49 @@ export function LoanApplicationPage() {
       <div className="bg-white border-b border-gray-100 py-5 px-6">
         <div className="max-w-3xl mx-auto">
           <Stepper currentStep={currentStep} totalSteps={STEPS.length} />
+        </div>
+      </div>
+
+      {/* ─── AI Agent Banner ─── */}
+      <div className="bg-white border-b border-gray-100 py-3 px-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center gap-4 bg-navy-900 rounded-xl px-5 py-3.5">
+            <div className="h-10 w-10 rounded-full bg-gold-500 flex items-center justify-center shrink-0">
+              <Bot className="h-5 w-5 text-navy-900" aria-hidden="true" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-body text-sm font-semibold text-white leading-tight">
+                AI Agent se form fill karwayein
+              </p>
+              <p className="font-body text-xs text-white/60 mt-0.5">
+                Bass sawaalon ka jawab dein — Agent baaki sambhal lega!
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem("jmd_chat_open_loan", "1");
+                // Dispatch storage event so AIChatWidget on same tab detects it
+                window.dispatchEvent(
+                  new StorageEvent("storage", {
+                    key: "jmd_chat_open_loan",
+                    newValue: "1",
+                  }),
+                );
+                // Also directly open chat by scrolling to it
+                window.scrollTo({
+                  top: document.body.scrollHeight,
+                  behavior: "smooth",
+                });
+                // Reload to trigger the useEffect in AIChatWidget
+                window.location.href = "/?open_loan_agent=1";
+              }}
+              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-500 text-navy-900 font-body text-xs font-semibold hover:bg-gold-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+            >
+              <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              Start AI Agent
+            </button>
+          </div>
         </div>
       </div>
 
