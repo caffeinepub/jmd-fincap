@@ -1,6 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+const _DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+function getActiveLogo(): string {
+  try {
+    const s = localStorage.getItem("jmd_custom_logo");
+    if (s?.startsWith("data:")) return s;
+  } catch {
+    /* ignore */
+  }
+  return _DEFAULT_LOGO;
+}
 import {
   Select,
   SelectContent,
@@ -657,10 +668,10 @@ export function LoanApplicationPage() {
             loanAmount,
             monthlyIncome,
             occupation,
-            "", // skip large base64 files for backend
-            "", // panCardFile
-            "", // photoFile
-            "", // signatureFile
+            aadhaarCardFile?.base64 ?? "", // aadhaarCardFile — send to backend
+            panCardFile?.base64 ?? "", // panCardFile — send to backend
+            customerPhoto?.base64 ?? "", // photoFile — send to backend
+            customerSignature?.base64 ?? "", // signatureFile — send to backend
           );
         } catch {
           // Backend save failed — data is already in localStorage, so it's fine
@@ -694,9 +705,12 @@ export function LoanApplicationPage() {
         <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center">
           <a href="/" className="flex items-center gap-3">
             <img
-              src="/assets/generated/jmd-fincap-logo-main.png"
+              src={getActiveLogo()}
               alt="JMD FinCap"
               className="h-12 w-auto object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
+              }}
             />
             <span className="font-display text-xl font-bold text-navy-900">
               JMD FinCap
@@ -795,9 +809,12 @@ export function LoanApplicationPage() {
       <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center justify-between sticky top-0 z-40">
         <a href="/" className="flex items-center gap-3">
           <img
-            src="/assets/generated/jmd-fincap-logo-main.png"
+            src={getActiveLogo()}
             alt="JMD FinCap"
             className="h-10 w-auto object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
+            }}
           />
           <span className="font-display text-lg font-bold text-navy-900 hidden sm:block">
             JMD FinCap

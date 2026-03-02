@@ -2,6 +2,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "@tanstack/react-router";
+
+const _DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+function getActiveLogo(): string {
+  try {
+    const s = localStorage.getItem("jmd_custom_logo");
+    if (s?.startsWith("data:")) return s;
+  } catch {
+    /* ignore */
+  }
+  return _DEFAULT_LOGO;
+}
 import {
   Building2,
   Crown,
@@ -173,9 +184,12 @@ export function AdminLogin() {
             className="flex justify-center mb-6"
           >
             <img
-              src="/assets/generated/jmd-fincap-logo-main.png"
+              src={getActiveLogo()}
               alt="JMD FinCap"
               className="h-14 w-auto object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
+              }}
             />
           </motion.div>
 

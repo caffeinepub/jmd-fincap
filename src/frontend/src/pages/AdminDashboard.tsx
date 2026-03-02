@@ -37,6 +37,7 @@ import {
   ExternalLink,
   Eye,
   FileText,
+  Image,
   Inbox,
   LayoutDashboard,
   Loader2,
@@ -46,17 +47,19 @@ import {
   Phone,
   RefreshCw,
   Search,
+  Settings,
   Shield,
   ThumbsDown,
   ThumbsUp,
   TrendingUp,
+  Upload,
   Users,
   Wallet,
   X,
   ZoomIn,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Timestamp Utility ────────────────────────────────────────────────────────
@@ -818,13 +821,13 @@ function LoanApplicationCard({
     }
   })();
 
-  // Resolve document URLs -- check rawApp first, then separate docs store
+  // Resolve document URLs -- check backend fields first, then localStorage fallback
   const resolveDoc = (...keys: string[]): string => {
     for (const key of keys) {
-      // Check rawApp (spread extra fields from localStorage)
+      // 1. Check rawApp (backend data has actual base64 files)
       const fromRaw = rawApp[key] as string;
       if (fromRaw?.startsWith("data:")) return fromRaw;
-      // Check separate docs storage
+      // 2. Check separate localStorage docs storage (per application ID)
       const fromDocs = storedDocs?.[key] as string;
       if (fromDocs?.startsWith("data:")) return fromDocs;
     }
@@ -1444,21 +1447,123 @@ export function AdminDashboard() {
         }
       }
 
-      // Merge: prefer localStorage data (has full details), deduplicate by unique id or timestamp
+      // Merge: prefer backend data (has documents), fill in extra fields from localStorage
+      // Backend apps have documents (base64 files), localStorage apps have extra metadata (mobile, address, etc.)
       const seen = new Set<string>();
       const merged: LoanApplication[] = [];
 
-      for (const app of [...localApps, ...backendApps]) {
+      // Build a map of localStorage apps by their ID for quick lookup
+      const localAppMap = new Map<string, Record<string, unknown>>();
+      for (const app of localApps) {
         const rawApp = app as unknown as Record<string, unknown>;
-        // Use unique id if available, otherwise use timestamp string (each app has unique Date.now() id)
+        const key = (rawApp.id as string) || String(app.timestamp) || "";
+        if (key) localAppMap.set(key, rawApp);
+      }
+
+      // Backend apps take priority (they have documents now)
+      for (const backendApp of backendApps) {
+        const rawBackend = backendApp as unknown as Record<string, unknown>;
+        // Backend timestamp is nanoseconds BigInt -- convert to ms-based ID
+        const tsNs = backendApp.timestamp;
+        const tsMs =
+          typeof tsNs === "bigint"
+            ? Number(tsNs / BigInt(1_000_000))
+            : typeof tsNs === "number"
+              ? tsNs
+              : 0;
+        // Try to find matching local app (same firstName + approximate timestamp)
+        let matchedLocalKey: string | null = null;
+        for (const [key, localRaw] of localAppMap.entries()) {
+          const localFirstName =
+            (localRaw.firstName as string) ||
+            (localRaw.fullName as string)?.split(" ")[0] ||
+            "";
+          const backendFirstName = backendApp.firstName;
+          const localTs =
+            typeof localRaw.timestamp === "number" ? localRaw.timestamp : 0;
+          // Match if same firstName and timestamps within 10 seconds
+          if (
+            localFirstName === backendFirstName &&
+            Math.abs(localTs - tsMs) < 10_000
+          ) {
+            matchedLocalKey = key;
+            break;
+          }
+        }
+        // Merge extra fields from localStorage into backend app
+        const localExtra = matchedLocalKey
+          ? localAppMap.get(matchedLocalKey)
+          : null;
+        const mergedApp = localExtra
+          ? ({
+              ...localExtra,
+              ...rawBackend,
+              // Keep backend's document fields (they have the actual base64 data)
+              aadharCardFile:
+                (rawBackend.aadharCardFile as string) ||
+                (localExtra.aadharCardFile as string) ||
+                "",
+              panCardFile:
+                (rawBackend.panCardFile as string) ||
+                (localExtra.panCardFile as string) ||
+                "",
+              photoFile:
+                (rawBackend.photoFile as string) ||
+                (localExtra.photoFile as string) ||
+                "",
+              signatureFile:
+                (rawBackend.signatureFile as string) ||
+                (localExtra.signatureFile as string) ||
+                "",
+              // Also keep extra localStorage-only fields
+              mobile1: (localExtra.mobile1 as string) || "",
+              mobile2: (localExtra.mobile2 as string) || "",
+              currentAddress: (localExtra.currentAddress as string) || "",
+              aadhaarNumber:
+                (localExtra.aadhaarNumber as string) ||
+                backendApp.aadharNumber ||
+                "",
+              fullName:
+                (localExtra.fullName as string) ||
+                `${backendApp.firstName} ${backendApp.lastName}`.trim(),
+              fatherHusbandName:
+                (localExtra.fatherHusbandName as string) ||
+                backendApp.fatherName ||
+                "",
+              loanDuration:
+                (localExtra.loanDuration as string) || backendApp.tenure || "",
+              occupation:
+                (localExtra.occupation as string) ||
+                backendApp.employeeType ||
+                "",
+              interestRate: (localExtra.interestRate as string) || "",
+              monthlyEMI: (localExtra.monthlyEMI as string) || "",
+              id:
+                (localExtra.id as string) ||
+                (rawBackend.id as string) ||
+                String(tsMs),
+            } as unknown as LoanApplication)
+          : backendApp;
+
         const key =
-          (rawApp.id as string) ||
-          String(app.timestamp) ||
-          `${app.firstName || ""}-${(rawApp.aadhaarNumber as string) || app.aadharNumber || ""}-${app.dateOfBirth || ""}-${(rawApp.mobile1 as string) || ""}`;
+          ((mergedApp as unknown as Record<string, unknown>).id as string) ||
+          String(backendApp.timestamp);
         if (key && !seen.has(key)) {
           seen.add(key);
-          merged.push(app);
+          merged.push(mergedApp);
         }
+        if (matchedLocalKey) localAppMap.delete(matchedLocalKey); // Remove matched so it's not duplicated below
+      }
+
+      // Add any remaining localStorage-only apps (not in backend yet)
+      for (const app of localApps) {
+        const rawApp = app as unknown as Record<string, unknown>;
+        const key = (rawApp.id as string) || String(app.timestamp) || "";
+        if (!key || seen.has(key)) continue;
+        // Check if this key was already consumed via matchedLocalKey
+        if (!localAppMap.has(key)) continue;
+        seen.add(key);
+        merged.push(app);
       }
 
       // Sort by timestamp descending (safe BigInt comparison)
@@ -1720,9 +1825,13 @@ export function AdminDashboard() {
             {/* Sidebar header */}
             <div className="p-6 border-b border-white/10">
               <img
-                src="/assets/generated/jmd-fincap-logo-main.png"
+                src={getActiveLogo()}
                 alt="JMD FinCap"
                 className="h-12 w-auto object-contain mb-4"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+                }}
               />
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
@@ -1774,6 +1883,18 @@ export function AdminDashboard() {
                       {loanStats.total > 99 ? "99+" : loanStats.total}
                     </span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("settings")}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-colors ${
+                    activeTab === "settings"
+                      ? "bg-gold-500/15 text-gold-500"
+                      : "text-white/60 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Settings className="h-4 w-4 shrink-0" />
+                  Settings
                 </button>
               </div>
             </nav>
@@ -1959,6 +2080,13 @@ export function AdminDashboard() {
                 <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
                   {loanApplications.length}
                 </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </TabsTrigger>
             </TabsList>
 
@@ -2279,9 +2407,248 @@ export function AdminDashboard() {
                 )}
               </motion.div>
             </TabsContent>
+            {/* ── Settings Tab ── */}
+            <TabsContent value="settings" className="space-y-0">
+              <LogoUploadSettings />
+            </TabsContent>
           </Tabs>
         </main>
       </div>
     </div>
+  );
+}
+
+// ─── Logo Upload Settings Component ──────────────────────────────────────────
+
+const DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+export const LOGO_STORAGE_KEY = "jmd_custom_logo";
+
+export function getActiveLogo(): string {
+  try {
+    const stored = localStorage.getItem(LOGO_STORAGE_KEY);
+    if (stored?.startsWith("data:")) return stored;
+  } catch {
+    // ignore
+  }
+  return DEFAULT_LOGO;
+}
+
+function LogoUploadSettings() {
+  const [logoPreview, setLogoPreview] = useState<string>(getActiveLogo());
+  const [uploading, setUploading] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Validate type
+      if (!file.type.startsWith("image/")) {
+        toast.error("Sirf image file upload karein (JPG, PNG, WebP)");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("File size 5MB se kam honi chahiye");
+        return;
+      }
+
+      setUploading(true);
+      setSaved(false);
+
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Compress image
+        const compressed = await new Promise<string>((resolve) => {
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const MAX = 600;
+            let { width, height } = img;
+            if (width > MAX || height > MAX) {
+              if (width > height) {
+                height = Math.round((height * MAX) / width);
+                width = MAX;
+              } else {
+                width = Math.round((width * MAX) / height);
+                height = MAX;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.82));
+          };
+          img.src = dataUrl;
+        });
+
+        localStorage.setItem(LOGO_STORAGE_KEY, compressed);
+        setLogoPreview(compressed);
+        setSaved(true);
+        toast.success("Logo save ho gaya! Website par ab naya logo dikhega.", {
+          description: "Page refresh karein to logo update dekhein.",
+        });
+      } catch {
+        toast.error("Logo upload nahi hua. Dobara try karein.");
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [],
+  );
+
+  const handleReset = useCallback(() => {
+    localStorage.removeItem(LOGO_STORAGE_KEY);
+    setLogoPreview(DEFAULT_LOGO);
+    setSaved(false);
+    toast.success("Logo default par reset ho gaya.");
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1, duration: 0.5 }}
+      className="max-w-2xl"
+    >
+      <div className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <h2 className="font-display text-lg font-bold text-navy-900 flex items-center gap-2">
+            <Image className="h-5 w-5 text-gold-500" />
+            Website Logo Settings
+          </h2>
+          <p className="font-body text-xs text-gray-500 mt-1">
+            Yahan se aap website ka logo upload karke replace kar sakte hain.
+            JPG, PNG, WebP format supported hai.
+          </p>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Current Logo Preview */}
+          <div>
+            <p className="font-body text-sm font-semibold text-gray-700 mb-3">
+              Current Logo (Preview)
+            </p>
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 bg-gray-50 flex items-center justify-center min-h-[120px]">
+              <img
+                src={logoPreview}
+                alt="Current logo"
+                className="max-h-24 w-auto object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = DEFAULT_LOGO;
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Upload Section */}
+          <div>
+            <p className="font-body text-sm font-semibold text-gray-700 mb-3">
+              Naya Logo Upload Karein
+            </p>
+            <div className="space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="logo-upload-input"
+              />
+              <label htmlFor="logo-upload-input">
+                <div
+                  className={`
+                    flex flex-col items-center justify-center gap-3 px-6 py-10 
+                    border-2 border-dashed rounded-xl cursor-pointer transition-colors duration-200
+                    ${uploading ? "border-gold-300 bg-gold-50" : "border-gray-200 bg-gray-50 hover:border-gold-400 hover:bg-gold-50"}
+                  `}
+                >
+                  {uploading ? (
+                    <Loader2 className="h-8 w-8 text-gold-500 animate-spin" />
+                  ) : (
+                    <Upload className="h-8 w-8 text-gray-400" />
+                  )}
+                  <div className="text-center">
+                    <p className="font-body text-sm font-semibold text-navy-900">
+                      {uploading
+                        ? "Upload ho raha hai..."
+                        : "Logo file select karein"}
+                    </p>
+                    <p className="font-body text-xs text-gray-400 mt-1">
+                      JPG, PNG, WebP · Max 5MB · Transparent PNG best result
+                      deta hai
+                    </p>
+                  </div>
+                </div>
+              </label>
+
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex-1 bg-navy-900 hover:bg-navy-700 text-white font-body text-sm"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  {uploading ? "Upload ho raha hai..." : "Logo Upload Karein"}
+                </Button>
+                {logoPreview !== DEFAULT_LOGO && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    className="font-body text-sm border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-300"
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
+
+              {saved && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <p className="font-body text-sm text-green-700">
+                    Logo successfully save ho gaya! Website par ab naya logo
+                    dikhega -- page refresh karein.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p className="font-body text-xs font-semibold text-blue-700 mb-2 uppercase tracking-wide">
+              Logo Upload Guide
+            </p>
+            <ul className="space-y-1">
+              {[
+                "Transparent background wala PNG sabse accha dikhega",
+                "Logo ka size 300x100px se 600x200px ke beech rakhen",
+                "Upload ke baad website ka page refresh karein",
+                "Logo navbar, footer, admin panel sab jagah update hoga",
+              ].map((tip) => (
+                <li
+                  key={tip}
+                  className="font-body text-xs text-blue-600 flex items-start gap-2"
+                >
+                  <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

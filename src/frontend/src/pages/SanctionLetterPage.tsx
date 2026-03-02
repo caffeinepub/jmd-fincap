@@ -3,6 +3,17 @@ import { useSearch } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, Download, Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 
+const _DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+function getActiveLogo(): string {
+  try {
+    const s = localStorage.getItem("jmd_custom_logo");
+    if (s?.startsWith("data:")) return s;
+  } catch {
+    /* ignore */
+  }
+  return _DEFAULT_LOGO;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LoanAppData {
@@ -260,9 +271,12 @@ export function SanctionLetterPage() {
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/assets/generated/jmd-fincap-logo-main.png"
+                  src={getActiveLogo()}
                   alt="JMD FinCap"
                   className="h-16 w-auto object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
+                  }}
                 />
                 <div>
                   <h1 className="font-display text-2xl font-bold text-navy-900 leading-tight">

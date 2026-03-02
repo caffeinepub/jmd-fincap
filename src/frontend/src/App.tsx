@@ -40,6 +40,22 @@ import { toast } from "sonner";
 import { useActor } from "./hooks/useActor";
 import { router } from "./router";
 
+// ─── Logo Helper ──────────────────────────────────────────────────────────────
+
+const DEFAULT_LOGO_SRC =
+  "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+const LOGO_STORAGE_KEY = "jmd_custom_logo";
+
+function getActiveLogo(): string {
+  try {
+    const stored = localStorage.getItem(LOGO_STORAGE_KEY);
+    if (stored?.startsWith("data:")) return stored;
+  } catch {
+    // ignore
+  }
+  return DEFAULT_LOGO_SRC;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ChatStep =
@@ -104,6 +120,18 @@ function useScrollFade() {
 
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoSrc, setLogoSrc] = useState(getActiveLogo);
+
+  // Listen for storage changes (logo updated in admin panel)
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === LOGO_STORAGE_KEY) {
+        setLogoSrc(getActiveLogo());
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
 
   const navLinks = [
     { label: "Home", href: "#home" },
@@ -130,9 +158,12 @@ function Navbar() {
           aria-label="JMD FinCap — Go to top"
         >
           <img
-            src="/assets/generated/jmd-fincap-logo-main.png"
+            src={logoSrc}
             alt="JMD FinCap logo"
             className="h-12 w-auto object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = DEFAULT_LOGO_SRC;
+            }}
           />
         </button>
 
@@ -927,9 +958,12 @@ function Footer() {
           {/* Brand */}
           <div>
             <img
-              src="/assets/generated/jmd-fincap-logo-main.png"
+              src={getActiveLogo()}
               alt="JMD FinCap"
               className="h-14 w-auto mb-4 object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = DEFAULT_LOGO_SRC;
+              }}
             />
             <p className="font-body text-white/50 text-sm leading-relaxed mb-6 max-w-xs">
               Your trusted partner for comprehensive financial services in
