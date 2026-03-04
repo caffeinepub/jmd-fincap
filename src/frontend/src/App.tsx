@@ -321,17 +321,6 @@ function Navbar() {
           >
             Apply Loan
           </a>
-          <a
-            href="/admin"
-            className={`text-xs font-body font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 rounded px-1 ${
-              scrolled
-                ? "text-gray-400 hover:text-gray-600"
-                : "text-white/40 hover:text-white/60"
-            }`}
-            aria-label="Admin panel"
-          >
-            Admin
-          </a>
           <button
             type="button"
             onClick={() => scrollTo("#contact")}
@@ -945,12 +934,12 @@ function ServicesSection() {
 function TeamSection() {
   const team = [
     {
-      name: "Sawan Solanki",
-      role: "CEO & Founder",
-      initials: "SS",
+      name: "CEO",
+      role: "Chief Executive Officer",
+      initials: "CEO",
       photo: "/assets/generated/team-ceo.dim_300x300.jpg",
       description:
-        "A visionary leader with 10+ years in financial services. Sawan founded JMD FinCap with the goal of democratizing access to quality financial guidance across Madhya Pradesh.",
+        "A visionary leader with 10+ years in financial services. Founded JMD FinCap with the goal of democratizing access to quality financial guidance across Madhya Pradesh.",
       expertise: [
         "Strategic Planning",
         "Wealth Management",
@@ -958,12 +947,12 @@ function TeamSection() {
       ],
     },
     {
-      name: "Sawan Chouhan",
-      role: "Co-Founder",
-      initials: "SC",
+      name: "Co-Founder",
+      role: "Co-Founder & Director",
+      initials: "CF",
       photo: "/assets/generated/team-cio.dim_300x300.jpg",
       description:
-        "An expert in loan structuring and insurance advisory, Sawan Chouhan co-founded JMD FinCap to create a client-first financial services firm rooted in transparency and trust.",
+        "An expert in loan structuring and insurance advisory. Co-founded JMD FinCap to create a client-first financial services firm rooted in transparency and trust.",
       expertise: ["Loan Advisory", "Insurance Planning", "Client Relations"],
     },
   ];
@@ -1139,12 +1128,6 @@ function ContactSection() {
                   label: "Email",
                   value: "contact.jmdfincap@gmail.com",
                   href: "mailto:contact.jmdfincap@gmail.com",
-                },
-                {
-                  icon: MapPin,
-                  label: "Office Address",
-                  value: "Bistan Road, Khargone, Madhya Pradesh",
-                  href: null,
                 },
               ].map(({ icon: Icon, label, value, href }) => (
                 <div
@@ -1396,7 +1379,6 @@ function Footer() {
                   text: "contact.jmdfincap@gmail.com",
                   href: "mailto:contact.jmdfincap@gmail.com",
                 },
-                { icon: MapPin, text: "Bistan Road, Khargone, MP", href: null },
               ].map(({ icon: Icon, text, href }) => (
                 <div key={text} className="flex items-center gap-3">
                   <Icon

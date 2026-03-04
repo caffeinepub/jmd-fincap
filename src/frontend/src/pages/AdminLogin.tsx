@@ -26,6 +26,7 @@ import {
   Mail,
   RefreshCw,
   Shield,
+  Smartphone,
   User,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -94,13 +95,37 @@ function savePasswordForRole(roleId: string, newPassword: string) {
   localStorage.setItem(PASS_KEY, JSON.stringify(saved));
 }
 
+// ─── PIN Helpers ──────────────────────────────────────────────────────────────
+function getPinForRole(roleId: string): string | null {
+  try {
+    return localStorage.getItem(`jmd_pin_${roleId}`);
+  } catch {
+    return null;
+  }
+}
+
+function savePinForRole(roleId: string, pin: string) {
+  try {
+    localStorage.setItem(`jmd_pin_${roleId}`, pin);
+  } catch {
+    /* ignore */
+  }
+}
+
 // Generate 6-digit OTP
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 // ─── View States ──────────────────────────────────────────────────────────────
-type View = "login" | "forgot-role" | "otp-sent" | "reset-password" | "success";
+type View =
+  | "login"
+  | "forgot-role"
+  | "set-pin"
+  | "pin-verify"
+  | "otp-sent"
+  | "reset-password"
+  | "success";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -128,6 +153,12 @@ export function AdminLogin() {
   const [resetError, setResetError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // PIN state
+  const [pinInput, setPinInput] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinLoading, setPinLoading] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -317,6 +348,59 @@ export function AdminLogin() {
     setNewPassword("");
     setConfirmPassword("");
     setResetError("");
+    setPinInput("");
+    setPinConfirm("");
+    setPinError("");
+  };
+
+  // Handle proceed from role selection — checks if PIN is set
+  const handleProceedFromRole = () => {
+    const existingPin = getPinForRole(forgotRole.id);
+    setPinInput("");
+    setPinConfirm("");
+    setPinError("");
+    if (!existingPin) {
+      setView("set-pin");
+    } else {
+      setView("pin-verify");
+    }
+  };
+
+  // Handle setting a new PIN
+  const handleSetPin = async () => {
+    if (pinInput.length !== 4) {
+      setPinError("4-digit PIN enter karein.");
+      return;
+    }
+    if (pinInput !== pinConfirm) {
+      setPinError("PINs match nahi kar rahe hain. Dobara try karein.");
+      return;
+    }
+    setPinLoading(true);
+    await new Promise((r) => setTimeout(r, 500));
+    savePinForRole(forgotRole.id, pinInput);
+    setPinLoading(false);
+    // After setting PIN, immediately verify then proceed to OTP
+    setPinInput(pinInput); // keep the value for verification
+    void handleSendOTP();
+  };
+
+  // Handle verifying existing PIN
+  const handleVerifyPin = async () => {
+    if (pinInput.length !== 4) {
+      setPinError("4-digit PIN enter karein.");
+      return;
+    }
+    setPinLoading(true);
+    await new Promise((r) => setTimeout(r, 500));
+    const storedPin = getPinForRole(forgotRole.id);
+    if (pinInput !== storedPin) {
+      setPinError("Galat PIN. Dobara try karein.");
+      setPinLoading(false);
+      return;
+    }
+    setPinLoading(false);
+    void handleSendOTP();
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -621,7 +705,7 @@ export function AdminLogin() {
                 </div>
 
                 <Button
-                  onClick={() => void handleSendOTP()}
+                  onClick={handleProceedFromRole}
                   disabled={otpLoading}
                   className="w-full h-12 font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 disabled:opacity-60 rounded-xl"
                 >
@@ -637,6 +721,258 @@ export function AdminLogin() {
                     </>
                   )}
                 </Button>
+              </motion.div>
+            )}
+
+            {/* ── SET PIN VIEW ── */}
+            {view === "set-pin" && (
+              <motion.div
+                key="set-pin"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setView("forgot-role")}
+                  className="flex items-center gap-1.5 text-white/40 hover:text-white/70 font-body text-xs mb-5 transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+
+                <div className="text-center mb-6">
+                  <div className="h-14 w-14 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center mx-auto mb-3">
+                    <Lock className="h-6 w-6 text-gold-400" />
+                  </div>
+                  <h2 className="font-display text-xl font-bold text-white mb-1">
+                    Security PIN Set Karein
+                  </h2>
+                  <p className="font-body text-sm text-white/50">
+                    Apne role ke liye ek 4-digit PIN banayein. Ye password reset
+                    ke liye zaroori hoga.
+                  </p>
+                </div>
+
+                <div className="space-y-4 mb-5">
+                  <div className="space-y-2">
+                    <Label className="font-body text-xs font-semibold text-white/60 uppercase tracking-wider">
+                      4-Digit PIN
+                    </Label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="• • • •"
+                      value={pinInput}
+                      onChange={(e) => {
+                        const val = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 4);
+                        setPinInput(val);
+                        setPinError("");
+                      }}
+                      className="text-center font-mono text-2xl tracking-widest bg-white/10 border-white/20 placeholder:text-white/30 focus:border-gold-500 h-14 rounded-xl"
+                      style={{
+                        color: "white",
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                      }}
+                      disabled={pinLoading}
+                      data-ocid="pin.input"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="font-body text-xs font-semibold text-white/60 uppercase tracking-wider">
+                      PIN Confirm Karein
+                    </Label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="• • • •"
+                      value={pinConfirm}
+                      onChange={(e) => {
+                        const val = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 4);
+                        setPinConfirm(val);
+                        setPinError("");
+                      }}
+                      className="text-center font-mono text-2xl tracking-widest bg-white/10 border-white/20 placeholder:text-white/30 focus:border-gold-500 h-14 rounded-xl"
+                      style={{
+                        color: "white",
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                      }}
+                      disabled={pinLoading}
+                      data-ocid="pin.confirm.input"
+                    />
+                  </div>
+
+                  {pinError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/15 border border-red-500/30"
+                      data-ocid="pin.error_state"
+                    >
+                      <span className="h-4 w-4 rounded-full bg-red-500/40 flex items-center justify-center shrink-0 text-red-300 text-xs font-bold">
+                        !
+                      </span>
+                      <p className="font-body text-sm text-red-300">
+                        {pinError}
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+
+                <Button
+                  onClick={() => void handleSetPin()}
+                  disabled={
+                    pinLoading ||
+                    pinInput.length !== 4 ||
+                    pinConfirm.length !== 4
+                  }
+                  className="w-full h-12 font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 disabled:opacity-60 rounded-xl mb-4"
+                  data-ocid="pin.submit_button"
+                >
+                  {pinLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      PIN Set ho raha hai...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="mr-2 h-4 w-4" />
+                      PIN Set Karein
+                    </>
+                  )}
+                </Button>
+
+                <p className="font-body text-xs text-white/30 text-center">
+                  Ye PIN sirf aapke is device par stored hai
+                </p>
+              </motion.div>
+            )}
+
+            {/* ── PIN VERIFY VIEW ── */}
+            {view === "pin-verify" && (
+              <motion.div
+                key="pin-verify"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinInput("");
+                    setPinError("");
+                    setView("forgot-role");
+                  }}
+                  className="flex items-center gap-1.5 text-white/40 hover:text-white/70 font-body text-xs mb-5 transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+
+                <div className="text-center mb-6">
+                  <div className="h-14 w-14 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center mx-auto mb-3">
+                    <Smartphone className="h-6 w-6 text-gold-400" />
+                  </div>
+                  <h2 className="font-display text-xl font-bold text-white mb-1">
+                    Security PIN Darj Karein
+                  </h2>
+                  <p className="font-body text-sm text-white/50">
+                    Apna 4-digit security PIN enter karein —{" "}
+                    <span className="text-gold-400">{forgotRole.label}</span> ke
+                    liye
+                  </p>
+                </div>
+
+                <div className="space-y-3 mb-5">
+                  <Label className="font-body text-xs font-semibold text-white/60 uppercase tracking-wider">
+                    4-Digit Security PIN
+                  </Label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="• • • •"
+                    value={pinInput}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setPinInput(val);
+                      setPinError("");
+                    }}
+                    className="text-center font-mono text-2xl tracking-widest bg-white/10 border-white/20 placeholder:text-white/30 focus:border-gold-500 h-14 rounded-xl"
+                    style={{
+                      color: "white",
+                      backgroundColor: "rgba(255,255,255,0.1)",
+                    }}
+                    disabled={pinLoading}
+                    data-ocid="pin.verify.input"
+                  />
+
+                  {pinError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/15 border border-red-500/30"
+                      data-ocid="pin.verify.error_state"
+                    >
+                      <span className="h-4 w-4 rounded-full bg-red-500/40 flex items-center justify-center shrink-0 text-red-300 text-xs font-bold">
+                        !
+                      </span>
+                      <p className="font-body text-sm text-red-300">
+                        {pinError}
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+
+                <Button
+                  onClick={() => void handleVerifyPin()}
+                  disabled={pinLoading || pinInput.length !== 4}
+                  className="w-full h-12 font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 disabled:opacity-60 rounded-xl mb-4"
+                  data-ocid="pin.verify.submit_button"
+                >
+                  {pinLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verify ho raha hai...
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone className="mr-2 h-4 w-4" />
+                      PIN Verify Karein
+                    </>
+                  )}
+                </Button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Reset stored PIN and go back to set-pin
+                      try {
+                        localStorage.removeItem(`jmd_pin_${forgotRole.id}`);
+                      } catch {
+                        /* ignore */
+                      }
+                      setPinInput("");
+                      setPinConfirm("");
+                      setPinError("");
+                      setView("set-pin");
+                    }}
+                    className="font-body text-xs text-white/40 hover:text-gold-400 transition-colors"
+                    data-ocid="pin.reset.button"
+                  >
+                    PIN bhul gaye? PIN Reset Karein
+                  </button>
+                </div>
               </motion.div>
             )}
 

@@ -288,12 +288,6 @@ export function SanctionLetterPage() {
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-body text-xs text-gray-500">
-                  Bistan Road, Khargone
-                </p>
-                <p className="font-body text-xs text-gray-500">
-                  Madhya Pradesh — 451001
-                </p>
                 <p className="font-body text-xs text-gray-500 mt-1">
                   📞 +91 88899 56204
                 </p>
@@ -625,24 +619,12 @@ export function SanctionLetterPage() {
                 </div>
               </div>
             </div>
-
-            {/* ── Stamp Area ── */}
-            <div className="flex justify-end mt-6">
-              <div className="h-20 w-20 rounded-full border-4 border-dashed border-navy-900/30 flex items-center justify-center">
-                <p className="font-body text-xs text-navy-900/40 text-center font-semibold leading-tight">
-                  COMPANY
-                  <br />
-                  SEAL
-                </p>
-              </div>
-            </div>
           </div>
 
           {/* ── Footer ── */}
           <div className="bg-navy-900 px-12 py-4 mt-4">
             <p className="font-body text-xs text-white/50 text-center">
-              JMD FinCap | Bistan Road, Khargone, Madhya Pradesh — 451001 |
-              contact.jmdfincap@gmail.com | +91 88899 56204
+              JMD FinCap | contact.jmdfincap@gmail.com | +91 88899 56204
             </p>
             <p className="font-body text-xs text-white/30 text-center mt-1">
               This is a computer-generated letter. For any queries, please

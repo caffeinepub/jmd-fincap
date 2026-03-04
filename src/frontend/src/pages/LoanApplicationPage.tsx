@@ -1347,13 +1347,29 @@ export function LoanApplicationPage() {
                           className={inputCls}
                         />
                       </Field>
-                      <Field label="Loan Duration" required>
-                        <Input
-                          placeholder="e.g. 12 months"
-                          value={loanDuration}
-                          onChange={(e) => setLoanDuration(e.target.value)}
-                          className={inputCls}
-                        />
+                      <Field label="Loan Duration (Months)" required>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            placeholder="12"
+                            value={
+                              loanDuration
+                                ? loanDuration.replace(/\s*months?\s*/i, "")
+                                : ""
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLoanDuration(val ? `${val} months` : "");
+                            }}
+                            className={`${inputCls} pr-20`}
+                            min={1}
+                            max={360}
+                            inputMode="numeric"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-gray-400 pointer-events-none">
+                            months
+                          </span>
+                        </div>
                       </Field>
                       <Field label="Monthly EMI (₹)">
                         <Input
@@ -1641,13 +1657,12 @@ export function LoanApplicationPage() {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="font-body text-xs text-gray-400">
-              © {new Date().getFullYear()} JMD FinCap. All rights reserved. |
-              Bistan Road, Khargone, Madhya Pradesh |{" "}
+              © {new Date().getFullYear()} JMD FinCap. All rights reserved. |{" "}
               <a
-                href="tel:+917354696765"
+                href="tel:+918889956204"
                 className="hover:text-gold-600 transition-colors"
               >
-                +91 73546 96765
+                +91 88899 56204
               </a>
             </p>
           </div>

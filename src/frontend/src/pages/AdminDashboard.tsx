@@ -20,11 +20,19 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
+import {
+  ROLE_DESCRIPTIONS,
+  ROLE_LABELS,
+  type RolePermissions,
+  getPermissions,
+} from "@/utils/rolePermissions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  AlertCircle,
   AlertTriangle,
   Ban,
+  BarChart2,
   Building2,
   Calendar,
   CheckCircle2,
@@ -41,6 +49,7 @@ import {
   Inbox,
   LayoutDashboard,
   Loader2,
+  Lock,
   LogOut,
   Menu,
   MinusCircle,
@@ -770,6 +779,9 @@ function LoanApplicationCard({
   onReject,
   actionLoading,
   localStatus,
+  permissions,
+  isRecommended,
+  onRecommend,
 }: {
   app: LoanApplication;
   idx: number;
@@ -777,6 +789,9 @@ function LoanApplicationCard({
   onReject: (app: LoanApplication) => void;
   actionLoading: string | null;
   localStatus?: "pending" | "approved" | "rejected";
+  permissions: RolePermissions;
+  isRecommended?: boolean;
+  onRecommend?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<{
@@ -965,7 +980,12 @@ function LoanApplicationCard({
             Duration
           </div>
           <div className="font-body text-sm font-semibold text-navy-900">
-            {(rawApp.loanDuration as string) || app.tenure || "—"}
+            {(() => {
+              const dur = (rawApp.loanDuration as string) || app.tenure || "";
+              if (!dur) return "—";
+              if (dur.toLowerCase().includes("month")) return dur;
+              return `${dur} months`;
+            })()}
           </div>
         </div>
         <div>
@@ -990,33 +1010,69 @@ function LoanApplicationCard({
       <div className="px-6 pb-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
         {effectiveStatus === "pending" && (
           <>
-            <Button
-              size="sm"
-              onClick={() => setShowReviewModal(true)}
-              disabled={isThisLoading}
-              className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
-            >
-              {isThisLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
+            {/* CEO: Approve button */}
+            {permissions.canApproveLoan && (
+              <Button
+                size="sm"
+                onClick={() => setShowReviewModal(true)}
+                disabled={isThisLoading}
+                className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
+              >
+                {isThisLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ThumbsUp className="h-3.5 w-3.5" />
+                )}
+                Approve
+              </Button>
+            )}
+            {/* CEO: Reject button */}
+            {permissions.canRejectLoan && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReject(app)}
+                disabled={isThisLoading}
+                className="font-body text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5"
+              >
+                {isThisLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ThumbsDown className="h-3.5 w-3.5" />
+                )}
+                Reject
+              </Button>
+            )}
+            {/* Co-Founder: Recommend button */}
+            {permissions.canRecommendApproval && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  onRecommend?.(appId);
+                  toast.success("Recommendation recorded", {
+                    description: `${((app as unknown as Record<string, unknown>).fullName as string) || `${app.firstName} ${app.lastName}`}'s loan has been recommended for approval.`,
+                  });
+                }}
+                disabled={isRecommended}
+                className={`font-body text-xs font-semibold gap-1.5 ${
+                  isRecommended
+                    ? "bg-amber-100 text-amber-700 border border-amber-300 cursor-default"
+                    : "bg-amber-500 hover:bg-amber-600 text-white"
+                }`}
+              >
                 <ThumbsUp className="h-3.5 w-3.5" />
+                {isRecommended ? "Recommended ✓" : "Recommend Approval"}
+              </Button>
+            )}
+            {/* Admin: No approval access */}
+            {!permissions.canApproveLoan &&
+              !permissions.canRejectLoan &&
+              !permissions.canRecommendApproval && (
+                <span className="inline-flex items-center gap-1.5 font-body text-xs text-gray-400 italic">
+                  <Lock className="h-3.5 w-3.5" />
+                  Approval: Contact CEO
+                </span>
               )}
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onReject(app)}
-              disabled={isThisLoading}
-              className="font-body text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5"
-            >
-              {isThisLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ThumbsDown className="h-3.5 w-3.5" />
-              )}
-              Reject
-            </Button>
           </>
         )}
         {effectiveStatus === "approved" && (
@@ -1252,6 +1308,300 @@ function RoleIcon({ role }: { role: string }) {
   return <Shield className="h-3.5 w-3.5 text-gold-500" />;
 }
 
+// ─── Session Timeout Warning Modal ───────────────────────────────────────────
+
+function SessionTimeoutModal({
+  countdown,
+  onExtend,
+  onLogout,
+}: {
+  countdown: number;
+  onExtend: () => void;
+  onLogout: () => void;
+}) {
+  const minutes = Math.floor(countdown / 60);
+  const seconds = countdown % 60;
+  const urgency = countdown <= 60;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.92 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
+      >
+        {/* Top accent */}
+        <div
+          className={`h-1 w-full ${urgency ? "bg-red-500" : "bg-amber-500"}`}
+        />
+        <div className="p-6 text-center">
+          <div
+            className={`h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4 ${urgency ? "bg-red-100" : "bg-amber-100"}`}
+          >
+            <Clock
+              className={`h-8 w-8 ${urgency ? "text-red-500" : "text-amber-500"}`}
+            />
+          </div>
+          <h2 className="font-display text-xl font-bold text-navy-900 mb-2">
+            Session Expiring Soon
+          </h2>
+          <p className="font-body text-sm text-gray-500 mb-4">
+            Inactivity ke karan aapka session expire hone wala hai. Session
+            extend karein ya logout karein.
+          </p>
+
+          {/* Countdown */}
+          <div
+            className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl font-mono text-2xl font-bold mb-6 ${
+              urgency
+                ? "bg-red-50 text-red-600 border border-red-200"
+                : "bg-amber-50 text-amber-600 border border-amber-200"
+            }`}
+          >
+            <Clock className="h-5 w-5" />
+            {String(minutes).padStart(2, "0")}:
+            {String(seconds).padStart(2, "0")}
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={onLogout}
+              className="flex-1 font-body text-sm border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-600"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout Now
+            </Button>
+            <Button
+              onClick={onExtend}
+              className={`flex-1 font-body text-sm font-semibold ${
+                urgency
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-amber-500 hover:bg-amber-600 text-white"
+              }`}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Extend Session
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Access Denied Panel ──────────────────────────────────────────────────────
+
+function AccessDeniedPanel({ message }: { message: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="bg-white rounded-xl border border-gray-100 shadow-xs py-20 text-center"
+    >
+      <div className="h-16 w-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center mx-auto mb-4">
+        <Lock className="h-7 w-7 text-gray-400" />
+      </div>
+      <h3 className="font-display text-lg font-semibold text-gray-700 mb-2">
+        Access Restricted
+      </h3>
+      <p className="font-body text-sm text-gray-500 max-w-xs mx-auto">
+        {message}
+      </p>
+    </motion.div>
+  );
+}
+
+// ─── Reports & Analytics Tab ──────────────────────────────────────────────────
+
+function ReportsTab({
+  loanApplications,
+  submissions,
+  localLoanStatuses,
+}: {
+  loanApplications: LoanApplication[];
+  submissions: ContactFormSubmission[];
+  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
+}) {
+  const stats = useMemo(() => {
+    const total = loanApplications.length;
+    let approved = 0;
+    let rejected = 0;
+    let pending = 0;
+    let totalAmount = 0;
+
+    for (const app of loanApplications) {
+      const rawApp = app as unknown as Record<string, unknown>;
+      const id =
+        (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
+      const status =
+        localLoanStatuses[id] ??
+        ((rawApp.status as string) === "approved"
+          ? "approved"
+          : (rawApp.status as string) === "rejected"
+            ? "rejected"
+            : "pending");
+      if (status === "approved") approved++;
+      else if (status === "rejected") rejected++;
+      else pending++;
+      const amt = Number(app.loanAmount);
+      if (!Number.isNaN(amt)) totalAmount += amt;
+    }
+
+    return { total, approved, rejected, pending, totalAmount };
+  }, [loanApplications, localLoanStatuses]);
+
+  const approvalRate =
+    stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
+
+  const serviceBreakdown = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of submissions) {
+      map[s.serviceInterest] = (map[s.serviceInterest] || 0) + 1;
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [submissions]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1, duration: 0.5 }}
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-navy-900 flex items-center justify-center">
+            <BarChart2 className="h-5 w-5 text-gold-500" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold text-navy-900">
+              Reports & Analytics
+            </h2>
+            <p className="font-body text-xs text-gray-500">
+              Loan portfolio and enquiry breakdown
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Loan Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Total Applications",
+            value: stats.total,
+            color: "text-navy-900",
+            bg: "bg-navy-50",
+          },
+          {
+            label: "Approved",
+            value: stats.approved,
+            color: "text-green-700",
+            bg: "bg-green-50",
+          },
+          {
+            label: "Rejected",
+            value: stats.rejected,
+            color: "text-red-700",
+            bg: "bg-red-50",
+          },
+          {
+            label: "Pending",
+            value: stats.pending,
+            color: "text-amber-700",
+            bg: "bg-amber-50",
+          },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className={`${item.bg} rounded-xl p-5 border border-white`}
+          >
+            <div
+              className={`font-display text-3xl font-bold ${item.color} mb-1`}
+            >
+              {item.value}
+            </div>
+            <div className="font-body text-xs text-gray-500">{item.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Totals row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Total Loan Amount Requested
+          </div>
+          <div className="font-display text-2xl font-bold text-navy-900">
+            ₹{stats.totalAmount.toLocaleString("en-IN")}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Approval Rate
+          </div>
+          <div className="font-display text-2xl font-bold text-green-700">
+            {approvalRate}%
+          </div>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all duration-700"
+              style={{ width: `${approvalRate}%` }}
+            />
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Total Contact Enquiries
+          </div>
+          <div className="font-display text-2xl font-bold text-navy-900">
+            {submissions.length}
+          </div>
+        </div>
+      </div>
+
+      {/* Service Breakdown */}
+      {serviceBreakdown.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-6">
+          <h3 className="font-display text-base font-bold text-navy-900 mb-4">
+            Enquiries by Service
+          </h3>
+          <div className="space-y-3">
+            {serviceBreakdown.map(([service, count]) => {
+              const pct = Math.round((count / submissions.length) * 100);
+              return (
+                <div key={service}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-body text-sm text-gray-700">
+                      {service}
+                    </span>
+                    <span className="font-body text-xs font-semibold text-gray-500">
+                      {count} ({pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-navy-700 to-gold-500 rounded-full transition-all duration-700"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Loan Status Badge ────────────────────────────────────────────────────────
 
 interface LoanStatus {
@@ -1285,6 +1635,10 @@ function LoanStatusBadge({ status }: LoanStatus) {
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
+// Session timeout constants — defined outside component to avoid lint dep warnings
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const WARN_BEFORE_MS = 5 * 60 * 1000; // warn at 5 minutes remaining
+
 export function AdminDashboard() {
   const { actor, isFetching: actorFetching } = useActor();
   const navigate = useNavigate();
@@ -1315,6 +1669,113 @@ export function AdminDashboard() {
   // Session data
   const session = getSession();
   const sessionToken = session?.token ?? "";
+  const permissions = getPermissions(session?.role ?? "admin");
+
+  // Recommended loans (Co-Founder)
+  const [recommendedLoans, setRecommendedLoans] = useState<Set<string>>(
+    new Set(),
+  );
+
+  // Session timeout state (30 min inactivity, warn at 5 min remaining)
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+  const [timeoutCountdown, setTimeoutCountdown] = useState(300); // seconds
+  const lastActivityRef = useRef<number>(Date.now());
+  const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+
+  const clearAllTimers = useCallback(() => {
+    if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+    if (countdownIntervalRef.current)
+      clearInterval(countdownIntervalRef.current);
+  }, []);
+
+  const doLogout = useCallback(() => {
+    localStorage.removeItem("adminSession");
+    localStorage.removeItem("jmd_admin_token");
+    window.location.href = "/admin/login";
+  }, []);
+
+  const extendSession = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    setShowTimeoutWarning(false);
+    clearAllTimers();
+    if (countdownIntervalRef.current)
+      clearInterval(countdownIntervalRef.current);
+    // Restart timers
+    warnTimerRef.current = setTimeout(() => {
+      setShowTimeoutWarning(true);
+      setTimeoutCountdown(300);
+      countdownIntervalRef.current = setInterval(() => {
+        setTimeoutCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current!);
+            doLogout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }, SESSION_TIMEOUT_MS - WARN_BEFORE_MS);
+
+    timeoutTimerRef.current = setTimeout(() => {
+      doLogout();
+    }, SESSION_TIMEOUT_MS);
+  }, [clearAllTimers, doLogout]);
+
+  // Session timeout setup
+  useEffect(() => {
+    const handleActivity = () => {
+      if (showTimeoutWarning) return; // don't reset if warning is showing
+      lastActivityRef.current = Date.now();
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("click", handleActivity);
+    window.addEventListener("keypress", handleActivity);
+    window.addEventListener("touchstart", handleActivity);
+
+    // Initial timer
+    warnTimerRef.current = setTimeout(() => {
+      setShowTimeoutWarning(true);
+      setTimeoutCountdown(300);
+      countdownIntervalRef.current = setInterval(() => {
+        setTimeoutCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current!);
+            doLogout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }, SESSION_TIMEOUT_MS - WARN_BEFORE_MS);
+
+    timeoutTimerRef.current = setTimeout(() => {
+      doLogout();
+    }, SESSION_TIMEOUT_MS);
+
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("click", handleActivity);
+      window.removeEventListener("keypress", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+      clearAllTimers();
+    };
+  }, [clearAllTimers, doLogout, showTimeoutWarning]);
+
+  // Sync activeTab with permissions — redirect away from forbidden tabs
+  useEffect(() => {
+    if (activeTab === "settings" && !permissions.canViewSettings) {
+      setActiveTab("loans");
+    }
+    if (activeTab === "reports" && !permissions.canViewReports) {
+      setActiveTab("loans");
+    }
+  }, [activeTab, permissions.canViewSettings, permissions.canViewReports]);
 
   // Live clock
   useEffect(() => {
@@ -1829,7 +2290,7 @@ export function AdminDashboard() {
             `}
           >
             {/* Sidebar header */}
-            <div className="p-6 border-b border-white/10">
+            <div className="p-5 border-b border-white/10">
               <img
                 src={getActiveLogo()}
                 alt="JMD FinCap"
@@ -1839,21 +2300,34 @@ export function AdminDashboard() {
                     "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
                 }}
               />
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
-                  <RoleIcon role={session?.role ?? "admin"} />
+              {/* Role Info Banner */}
+              <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
+                    <RoleIcon role={session?.role ?? "admin"} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-body text-[10px] text-white/40 uppercase tracking-wider">
+                      Logged in as
+                    </div>
+                    <div className="font-body text-xs text-gold-400 font-semibold truncate">
+                      {ROLE_LABELS[session?.role ?? "admin"] ??
+                        "Admin / Staff — Limited Access"}
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="font-body text-xs text-white/40 uppercase tracking-wider">
-                    {session?.role === "ceo"
-                      ? "CEO"
-                      : session?.role === "cofounder"
-                        ? "Co-Founder"
-                        : "Administrator"}
-                  </div>
-                  <div className="font-body text-xs text-white/70 truncate font-semibold">
-                    {session?.roleLabel ?? "Admin"}
-                  </div>
+                {/* Permission bullets */}
+                <div className="space-y-1 pt-1 border-t border-white/5">
+                  {(ROLE_DESCRIPTIONS[session?.role ?? "admin"] ?? []).map(
+                    (desc) => (
+                      <div key={desc} className="flex items-start gap-1.5">
+                        <span className="mt-1 h-1 w-1 rounded-full bg-gold-500/60 shrink-0" />
+                        <span className="font-body text-[10px] text-white/50 leading-tight">
+                          {desc}
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </div>
               </div>
             </div>
@@ -1890,18 +2364,34 @@ export function AdminDashboard() {
                     </span>
                   )}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("settings")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                    activeTab === "settings"
-                      ? "admin-sidebar-active"
-                      : "text-white/60 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  Settings
-                </button>
+                {permissions.canViewReports && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("reports")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
+                      activeTab === "reports"
+                        ? "admin-sidebar-active"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <BarChart2 className="h-4 w-4 shrink-0" />
+                    Reports
+                  </button>
+                )}
+                {permissions.canViewSettings && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("settings")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
+                      activeTab === "settings"
+                        ? "admin-sidebar-active"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <Settings className="h-4 w-4 shrink-0" />
+                    Settings
+                  </button>
+                )}
               </div>
             </nav>
 
@@ -2066,7 +2556,7 @@ export function AdminDashboard() {
             onValueChange={setActiveTab}
             className="space-y-6"
           >
-            <TabsList className="bg-white border border-gray-200 p-1 rounded-xl h-auto">
+            <TabsList className="bg-white border border-gray-200 p-1 rounded-xl h-auto flex-wrap">
               <TabsTrigger
                 value="enquiries"
                 className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
@@ -2087,13 +2577,24 @@ export function AdminDashboard() {
                   {loanApplications.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger
-                value="settings"
-                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </TabsTrigger>
+              {permissions.canViewReports && (
+                <TabsTrigger
+                  value="reports"
+                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                >
+                  <BarChart2 className="mr-2 h-4 w-4" />
+                  Reports
+                </TabsTrigger>
+              )}
+              {permissions.canViewSettings && (
+                <TabsTrigger
+                  value="settings"
+                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* ── Contact Enquiries Tab ── */}
@@ -2394,6 +2895,15 @@ export function AdminDashboard() {
                           onReject={handleRejectLoan}
                           actionLoading={actionLoading}
                           localStatus={localLoanStatuses[id]}
+                          permissions={permissions}
+                          isRecommended={recommendedLoans.has(id)}
+                          onRecommend={(rid) =>
+                            setRecommendedLoans((prev) => {
+                              const next = new Set(prev);
+                              next.add(rid);
+                              return next;
+                            })
+                          }
                         />
                       );
                     })}
@@ -2415,13 +2925,40 @@ export function AdminDashboard() {
                 )}
               </motion.div>
             </TabsContent>
+            {/* ── Reports Tab ── */}
+            {permissions.canViewReports && (
+              <TabsContent value="reports" className="space-y-0">
+                <ReportsTab
+                  loanApplications={loanApplications}
+                  submissions={submissions}
+                  localLoanStatuses={localLoanStatuses}
+                />
+              </TabsContent>
+            )}
             {/* ── Settings Tab ── */}
-            <TabsContent value="settings" className="space-y-0">
-              <LogoUploadSettings />
-            </TabsContent>
+            {permissions.canViewSettings ? (
+              <TabsContent value="settings" className="space-y-0">
+                <LogoUploadSettings />
+              </TabsContent>
+            ) : (
+              <TabsContent value="settings" className="space-y-0">
+                <AccessDeniedPanel message="Settings tab sirf CEO ke liye accessible hai. Please CEO se contact karein." />
+              </TabsContent>
+            )}
           </Tabs>
         </main>
       </div>
+
+      {/* ── Session Timeout Warning Modal ── */}
+      <AnimatePresence>
+        {showTimeoutWarning && (
+          <SessionTimeoutModal
+            countdown={timeoutCountdown}
+            onExtend={extendSession}
+            onLogout={doLogout}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
