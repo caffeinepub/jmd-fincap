@@ -29,9 +29,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  AlertCircle,
   AlertTriangle,
-  Ban,
   BarChart2,
   Building2,
   Calendar,
@@ -40,7 +38,6 @@ import {
   ChevronUp,
   Clock,
   CreditCard,
-  Crown,
   Download,
   ExternalLink,
   Eye,
@@ -65,7 +62,6 @@ import {
   Users,
   Wallet,
   X,
-  ZoomIn,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -780,8 +776,6 @@ function LoanApplicationCard({
   actionLoading,
   localStatus,
   permissions,
-  isRecommended,
-  onRecommend,
 }: {
   app: LoanApplication;
   idx: number;
@@ -790,8 +784,6 @@ function LoanApplicationCard({
   actionLoading: string | null;
   localStatus?: "pending" | "approved" | "rejected";
   permissions: RolePermissions;
-  isRecommended?: boolean;
-  onRecommend?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<{
@@ -1010,13 +1002,14 @@ function LoanApplicationCard({
       <div className="px-6 pb-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
         {effectiveStatus === "pending" && (
           <>
-            {/* CEO: Approve button */}
+            {/* Admin / BM: Approve button */}
             {permissions.canApproveLoan && (
               <Button
                 size="sm"
                 onClick={() => setShowReviewModal(true)}
                 disabled={isThisLoading}
                 className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
+                data-ocid="loans.confirm_button"
               >
                 {isThisLoading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1026,7 +1019,7 @@ function LoanApplicationCard({
                 Approve
               </Button>
             )}
-            {/* CEO: Reject button */}
+            {/* Admin / BM: Reject button */}
             {permissions.canRejectLoan && (
               <Button
                 size="sm"
@@ -1034,6 +1027,7 @@ function LoanApplicationCard({
                 onClick={() => onReject(app)}
                 disabled={isThisLoading}
                 className="font-body text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5"
+                data-ocid="loans.delete_button"
               >
                 {isThisLoading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1043,36 +1037,13 @@ function LoanApplicationCard({
                 Reject
               </Button>
             )}
-            {/* Co-Founder: Recommend button */}
-            {permissions.canRecommendApproval && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  onRecommend?.(appId);
-                  toast.success("Recommendation recorded", {
-                    description: `${((app as unknown as Record<string, unknown>).fullName as string) || `${app.firstName} ${app.lastName}`}'s loan has been recommended for approval.`,
-                  });
-                }}
-                disabled={isRecommended}
-                className={`font-body text-xs font-semibold gap-1.5 ${
-                  isRecommended
-                    ? "bg-amber-100 text-amber-700 border border-amber-300 cursor-default"
-                    : "bg-amber-500 hover:bg-amber-600 text-white"
-                }`}
-              >
-                <ThumbsUp className="h-3.5 w-3.5" />
-                {isRecommended ? "Recommended ✓" : "Recommend Approval"}
-              </Button>
+            {/* No approval access — show info */}
+            {!permissions.canApproveLoan && !permissions.canRejectLoan && (
+              <span className="inline-flex items-center gap-1.5 font-body text-xs text-gray-400 italic">
+                <Lock className="h-3.5 w-3.5" />
+                Approval: Contact Admin or Branch Manager
+              </span>
             )}
-            {/* Admin: No approval access */}
-            {!permissions.canApproveLoan &&
-              !permissions.canRejectLoan &&
-              !permissions.canRecommendApproval && (
-                <span className="inline-flex items-center gap-1.5 font-body text-xs text-gray-400 italic">
-                  <Lock className="h-3.5 w-3.5" />
-                  Approval: Contact CEO
-                </span>
-              )}
           </>
         )}
         {effectiveStatus === "approved" && (
@@ -1301,12 +1272,37 @@ function getSession(): SessionData | null {
   }
 }
 
+// Role badge color map
+const ROLE_BADGE_COLORS: Record<string, string> = {
+  admin: "text-yellow-400",
+  bm: "text-blue-400",
+  crm: "text-green-400",
+  accounts: "text-purple-400",
+  operations: "text-orange-400",
+};
+
 function RoleIcon({ role }: { role: string }) {
-  if (role === "ceo") return <Crown className="h-3.5 w-3.5 text-gold-500" />;
-  if (role === "cofounder")
-    return <Building2 className="h-3.5 w-3.5 text-gold-500" />;
-  return <Shield className="h-3.5 w-3.5 text-gold-500" />;
+  if (role === "bm")
+    return <Building2 className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.bm}`} />;
+  if (role === "crm")
+    return <Users className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.crm}`} />;
+  if (role === "accounts")
+    return <Wallet className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.accounts}`} />;
+  if (role === "operations")
+    return (
+      <Settings className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.operations}`} />
+    );
+  return <Shield className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.admin}`} />;
 }
+
+// Role display label map
+const ROLE_DISPLAY_LABELS: Record<string, string> = {
+  admin: "Administrator",
+  bm: "Branch Manager",
+  crm: "CRM Executive",
+  accounts: "Accounts",
+  operations: "Operations",
+};
 
 // ─── Session Timeout Warning Modal ───────────────────────────────────────────
 
@@ -1633,6 +1629,361 @@ function LoanStatusBadge({ status }: LoanStatus) {
   );
 }
 
+// ─── EMI Tracker Tab ─────────────────────────────────────────────────────────
+
+function EMITrackerTab({
+  loanApplications,
+  localLoanStatuses,
+}: {
+  loanApplications: LoanApplication[];
+  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
+}) {
+  const approvedLoans = loanApplications.filter((app) => {
+    const rawApp = app as unknown as Record<string, unknown>;
+    const id =
+      (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
+    const status =
+      localLoanStatuses[id] ??
+      ((rawApp.status as string) === "approved"
+        ? "approved"
+        : (rawApp.status as string) === "rejected"
+          ? "rejected"
+          : "pending");
+    return status === "approved";
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1, duration: 0.5 }}
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-purple-600 flex items-center justify-center">
+            <CreditCard className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold text-navy-900">
+              EMI Tracker
+            </h2>
+            <p className="font-body text-xs text-gray-500">
+              Track loan disbursements and EMI payments
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Approved Loans
+          </div>
+          <div className="font-display text-2xl font-bold text-navy-900">
+            {approvedLoans.length}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Total Disbursement Value
+          </div>
+          <div className="font-display text-2xl font-bold text-green-700">
+            ₹
+            {approvedLoans
+              .reduce((sum, a) => sum + (Number(a.loanAmount) || 0), 0)
+              .toLocaleString("en-IN")}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Pending Applications
+          </div>
+          <div className="font-display text-2xl font-bold text-amber-600">
+            {loanApplications.length - approvedLoans.length}
+          </div>
+        </div>
+      </div>
+
+      {/* EMI Records Table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <h3 className="font-display text-base font-bold text-navy-900">
+            Approved Loan Records
+          </h3>
+          <p className="font-body text-xs text-gray-500 mt-0.5">
+            Disbursed loans with EMI details
+          </p>
+        </div>
+        {approvedLoans.length === 0 ? (
+          <div className="py-16 text-center" data-ocid="emi.empty_state">
+            <div className="h-14 w-14 rounded-full bg-purple-50 flex items-center justify-center mx-auto mb-4">
+              <CreditCard className="h-7 w-7 text-purple-300" />
+            </div>
+            <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
+              No approved loans yet
+            </h3>
+            <p className="font-body text-sm text-gray-500">
+              Approved loan EMI records will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50/80">
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    #
+                  </TableHead>
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Customer Name
+                  </TableHead>
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Loan Amount
+                  </TableHead>
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Monthly EMI
+                  </TableHead>
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Tenure
+                  </TableHead>
+                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Status
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {approvedLoans.map((app, idx) => {
+                  const rawApp = app as unknown as Record<string, unknown>;
+                  const name =
+                    (rawApp.fullName as string) ||
+                    `${app.firstName} ${app.lastName}`.trim();
+                  const emi = (rawApp.monthlyEMI as string) || "—";
+                  const tenure =
+                    (rawApp.loanDuration as string) || app.tenure || "—";
+                  return (
+                    <TableRow
+                      key={`${app.firstName}-${String(app.timestamp)}`}
+                      className={`border-b border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-purple-50/20"}`}
+                      data-ocid={`emi.item.${idx + 1}`}
+                    >
+                      <TableCell className="font-body text-sm text-gray-400 font-mono">
+                        {idx + 1}
+                      </TableCell>
+                      <TableCell className="font-body text-sm font-medium text-navy-900">
+                        {name}
+                      </TableCell>
+                      <TableCell className="font-body text-sm font-semibold text-green-700">
+                        ₹{Number(app.loanAmount).toLocaleString("en-IN")}
+                      </TableCell>
+                      <TableCell className="font-body text-sm text-navy-900">
+                        {emi !== "—"
+                          ? `₹${Number(emi).toLocaleString("en-IN")}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="font-body text-sm text-gray-600">
+                        {tenure.toLowerCase().includes("month")
+                          ? tenure
+                          : `${tenure} months`}
+                      </TableCell>
+                      <TableCell>
+                        <span className="badge-approved">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          Disbursed
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Doc Verification Tab ─────────────────────────────────────────────────────
+
+function DocVerificationTab({
+  loanApplications,
+  localLoanStatuses,
+}: {
+  loanApplications: LoanApplication[];
+  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
+}) {
+  const pendingApps = loanApplications.filter((app) => {
+    const rawApp = app as unknown as Record<string, unknown>;
+    const id =
+      (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
+    const status =
+      localLoanStatuses[id] ??
+      ((rawApp.status as string) === "approved"
+        ? "approved"
+        : (rawApp.status as string) === "rejected"
+          ? "rejected"
+          : "pending");
+    return status === "pending";
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1, duration: 0.5 }}
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-orange-500 flex items-center justify-center">
+            <FileText className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold text-navy-900">
+              Document Verification Queue
+            </h2>
+            <p className="font-body text-xs text-gray-500">
+              Verify customer documents and process loan files
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Pending Verification
+          </div>
+          <div className="font-display text-2xl font-bold text-amber-600">
+            {pendingApps.length}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Total Applications
+          </div>
+          <div className="font-display text-2xl font-bold text-navy-900">
+            {loanApplications.length}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
+          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
+            Processed
+          </div>
+          <div className="font-display text-2xl font-bold text-green-700">
+            {loanApplications.length - pendingApps.length}
+          </div>
+        </div>
+      </div>
+
+      {/* Pending verification list */}
+      <div className="space-y-4">
+        {pendingApps.length === 0 ? (
+          <div
+            className="bg-white rounded-xl border border-gray-100 shadow-xs py-16 text-center"
+            data-ocid="processing.empty_state"
+          >
+            <div className="h-14 w-14 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="h-7 w-7 text-orange-300" />
+            </div>
+            <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
+              All documents verified
+            </h3>
+            <p className="font-body text-sm text-gray-500">
+              No pending applications in the queue.
+            </p>
+          </div>
+        ) : (
+          pendingApps.map((app, idx) => {
+            const rawApp = app as unknown as Record<string, unknown>;
+            const name =
+              (rawApp.fullName as string) ||
+              `${app.firstName} ${app.lastName}`.trim();
+            const aadhaarCardFile = (rawApp.aadhaarCardFile as string) || "";
+            const panCardFile = (rawApp.panCardFile as string) || "";
+            const customerPhoto =
+              (rawApp.customerPhoto as string) ||
+              (rawApp.photoFile as string) ||
+              "";
+            const customerSignature =
+              (rawApp.customerSignature as string) ||
+              (rawApp.signatureFile as string) ||
+              "";
+            const docsPresent = [
+              aadhaarCardFile,
+              panCardFile,
+              customerPhoto,
+              customerSignature,
+            ].filter(Boolean).length;
+            return (
+              <div
+                key={`${app.firstName}-${String(app.timestamp)}`}
+                className="bg-white rounded-xl border border-gray-100 shadow-xs p-5"
+                data-ocid={`processing.item.${idx + 1}`}
+              >
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                      <span className="font-body text-sm font-bold text-orange-600">
+                        {app.firstName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-navy-900">
+                        {name}
+                      </div>
+                      <div className="font-body text-xs text-gray-400">
+                        {app.loanType || "Personal Loan"} · ₹
+                        {Number(app.loanAmount).toLocaleString("en-IN")}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="badge-pending shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Pending Verification
+                  </span>
+                </div>
+                {/* Document checklist */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Aadhaar Card", present: !!aadhaarCardFile },
+                    { label: "PAN Card", present: !!panCardFile },
+                    { label: "Customer Photo", present: !!customerPhoto },
+                    { label: "Signature", present: !!customerSignature },
+                  ].map((doc) => (
+                    <div
+                      key={doc.label}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-body font-medium ${doc.present ? "bg-green-50 text-green-700 border border-green-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
+                    >
+                      {doc.present ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <MinusCircle className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      {doc.label}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 font-body text-xs text-gray-500">
+                  Documents uploaded:{" "}
+                  <span className="font-semibold text-navy-900">
+                    {docsPresent}/4
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 // Session timeout constants — defined outside component to avoid lint dep warnings
@@ -1647,7 +1998,13 @@ export function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionValid, setSessionValid] = useState<boolean | null>(null);
   const [sessionChecking, setSessionChecking] = useState(true);
-  const [activeTab, setActiveTab] = useState("enquiries");
+  // Default active tab depends on role — accounts/operations start on loans
+  const session0 = getSession();
+  const defaultTab =
+    session0?.role === "accounts" || session0?.role === "operations"
+      ? "loans"
+      : "enquiries";
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
   // Enquiries state
   const [search, setSearch] = useState("");
@@ -1670,11 +2027,6 @@ export function AdminDashboard() {
   const session = getSession();
   const sessionToken = session?.token ?? "";
   const permissions = getPermissions(session?.role ?? "admin");
-
-  // Recommended loans (Co-Founder)
-  const [recommendedLoans, setRecommendedLoans] = useState<Set<string>>(
-    new Set(),
-  );
 
   // Session timeout state (30 min inactivity, warn at 5 min remaining)
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
@@ -1775,7 +2127,26 @@ export function AdminDashboard() {
     if (activeTab === "reports" && !permissions.canViewReports) {
       setActiveTab("loans");
     }
-  }, [activeTab, permissions.canViewSettings, permissions.canViewReports]);
+    if (
+      activeTab === "enquiries" &&
+      session?.role !== "admin" &&
+      session?.role !== "bm" &&
+      session?.role !== "crm"
+    ) {
+      setActiveTab("loans");
+    }
+    if (activeTab === "emi" && session?.role !== "accounts") {
+      setActiveTab("loans");
+    }
+    if (activeTab === "processing" && session?.role !== "operations") {
+      setActiveTab("loans");
+    }
+  }, [
+    activeTab,
+    permissions.canViewSettings,
+    permissions.canViewReports,
+    session?.role,
+  ]);
 
   // Live clock
   useEffect(() => {
@@ -2303,16 +2674,40 @@ export function AdminDashboard() {
               {/* Role Info Banner */}
               <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
+                  <div
+                    className={`h-8 w-8 rounded-full border flex items-center justify-center shrink-0 ${
+                      session?.role === "bm"
+                        ? "bg-blue-500/20 border-blue-500/40"
+                        : session?.role === "crm"
+                          ? "bg-green-500/20 border-green-500/40"
+                          : session?.role === "accounts"
+                            ? "bg-purple-500/20 border-purple-500/40"
+                            : session?.role === "operations"
+                              ? "bg-orange-500/20 border-orange-500/40"
+                              : "bg-gold-500/20 border-gold-500/40"
+                    }`}
+                  >
                     <RoleIcon role={session?.role ?? "admin"} />
                   </div>
                   <div className="min-w-0">
                     <div className="font-body text-[10px] text-white/40 uppercase tracking-wider">
                       Logged in as
                     </div>
-                    <div className="font-body text-xs text-gold-400 font-semibold truncate">
+                    <div
+                      className={`font-body text-xs font-semibold truncate ${
+                        session?.role === "bm"
+                          ? "text-blue-400"
+                          : session?.role === "crm"
+                            ? "text-green-400"
+                            : session?.role === "accounts"
+                              ? "text-purple-400"
+                              : session?.role === "operations"
+                                ? "text-orange-400"
+                                : "text-gold-400"
+                      }`}
+                    >
                       {ROLE_LABELS[session?.role ?? "admin"] ??
-                        "Admin / Staff — Limited Access"}
+                        "Admin — Full Control"}
                     </div>
                   </div>
                 </div>
@@ -2335,21 +2730,29 @@ export function AdminDashboard() {
             {/* Nav items */}
             <nav className="flex-1 p-4" aria-label="Admin navigation">
               <div className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("enquiries")}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                    activeTab === "enquiries"
-                      ? "admin-sidebar-active"
-                      : "text-white/60 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  Contact Enquiries
-                </button>
+                {/* Contact Enquiries — admin, bm, crm only */}
+                {(session?.role === "admin" ||
+                  session?.role === "bm" ||
+                  session?.role === "crm") && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("enquiries")}
+                    data-ocid="nav.enquiries.tab"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
+                      activeTab === "enquiries"
+                        ? "admin-sidebar-active"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <LayoutDashboard className="h-4 w-4 shrink-0" />
+                    Contact Enquiries
+                  </button>
+                )}
+                {/* Loan Applications — all roles */}
                 <button
                   type="button"
                   onClick={() => setActiveTab("loans")}
+                  data-ocid="nav.loans.tab"
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                     activeTab === "loans"
                       ? "admin-sidebar-active"
@@ -2364,10 +2767,44 @@ export function AdminDashboard() {
                     </span>
                   )}
                 </button>
+                {/* EMI Tracker — accounts only */}
+                {session?.role === "accounts" && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("emi")}
+                    data-ocid="nav.emi.tab"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
+                      activeTab === "emi"
+                        ? "admin-sidebar-active"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4 shrink-0" />
+                    EMI Tracker
+                  </button>
+                )}
+                {/* Processing Status — operations only */}
+                {session?.role === "operations" && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("processing")}
+                    data-ocid="nav.processing.tab"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
+                      activeTab === "processing"
+                        ? "admin-sidebar-active"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    Doc Verification
+                  </button>
+                )}
+                {/* Reports — admin, bm, accounts */}
                 {permissions.canViewReports && (
                   <button
                     type="button"
                     onClick={() => setActiveTab("reports")}
+                    data-ocid="nav.reports.tab"
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                       activeTab === "reports"
                         ? "admin-sidebar-active"
@@ -2378,10 +2815,12 @@ export function AdminDashboard() {
                     Reports
                   </button>
                 )}
+                {/* Settings — admin only */}
                 {permissions.canViewSettings && (
                   <button
                     type="button"
                     onClick={() => setActiveTab("settings")}
+                    data-ocid="nav.settings.tab"
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
                       activeTab === "settings"
                         ? "admin-sidebar-active"
@@ -2446,14 +2885,34 @@ export function AdminDashboard() {
             </button>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-display text-xl font-bold text-navy-900">
-                  Admin Dashboard
+                  {session?.role === "bm"
+                    ? "Branch Manager Dashboard"
+                    : session?.role === "crm"
+                      ? "CRM Dashboard"
+                      : session?.role === "accounts"
+                        ? "Accounts Dashboard"
+                        : session?.role === "operations"
+                          ? "Operations Dashboard"
+                          : "Admin Dashboard"}
                 </h1>
-                {session?.role && session.role !== "admin" && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-body font-semibold bg-gold-100 text-gold-700 border border-gold-200">
+                {session?.role && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-body font-semibold border ${
+                      session.role === "bm"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : session.role === "crm"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : session.role === "accounts"
+                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            : session.role === "operations"
+                              ? "bg-orange-50 text-orange-700 border-orange-200"
+                              : "bg-gold-100 text-gold-700 border-gold-200"
+                    }`}
+                  >
                     <RoleIcon role={session.role} />
-                    {session.role === "ceo" ? "CEO" : "Co-Founder"}
+                    {ROLE_DISPLAY_LABELS[session.role] ?? session.role}
                   </span>
                 )}
               </div>
@@ -2517,22 +2976,30 @@ export function AdminDashboard() {
             className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-8"
             aria-label="Summary stats"
           >
-            <StatCard
-              icon={Users}
-              label="Contact Enquiries"
-              value={enquiryStats.total}
-              animate
-              numericValue={enquiryStats.total}
-              delay={0.1}
-            />
-            <StatCard
-              icon={Calendar}
-              label="Enquiries Today"
-              value={enquiryStats.today}
-              animate
-              numericValue={enquiryStats.today}
-              delay={0.15}
-            />
+            {(session?.role === "admin" ||
+              session?.role === "bm" ||
+              session?.role === "crm") && (
+              <StatCard
+                icon={Users}
+                label="Contact Enquiries"
+                value={enquiryStats.total}
+                animate
+                numericValue={enquiryStats.total}
+                delay={0.1}
+              />
+            )}
+            {(session?.role === "admin" ||
+              session?.role === "bm" ||
+              session?.role === "crm") && (
+              <StatCard
+                icon={Calendar}
+                label="Enquiries Today"
+                value={enquiryStats.today}
+                animate
+                numericValue={enquiryStats.today}
+                delay={0.15}
+              />
+            )}
             <StatCard
               icon={CreditCard}
               label="Loan Applications"
@@ -2544,8 +3011,20 @@ export function AdminDashboard() {
             />
             <StatCard
               icon={TrendingUp}
-              label="Top Service"
-              value={enquiryStats.topService}
+              label={
+                session?.role === "accounts"
+                  ? "EMI Records"
+                  : session?.role === "operations"
+                    ? "Pending Verification"
+                    : "Top Service"
+              }
+              value={
+                session?.role === "accounts"
+                  ? loanStats.total
+                  : session?.role === "operations"
+                    ? loanStats.total
+                    : enquiryStats.topService
+              }
               delay={0.25}
             />
           </section>
@@ -2557,19 +3036,27 @@ export function AdminDashboard() {
             className="space-y-6"
           >
             <TabsList className="bg-white border border-gray-200 p-1 rounded-xl h-auto flex-wrap">
-              <TabsTrigger
-                value="enquiries"
-                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                Contact Enquiries
-                <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
-                  {submissions.length}
-                </span>
-              </TabsTrigger>
+              {/* Contact Enquiries — admin, bm, crm only */}
+              {(session?.role === "admin" ||
+                session?.role === "bm" ||
+                session?.role === "crm") && (
+                <TabsTrigger
+                  value="enquiries"
+                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                  data-ocid="dashboard.enquiries.tab"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Contact Enquiries
+                  <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
+                    {submissions.length}
+                  </span>
+                </TabsTrigger>
+              )}
+              {/* Loan Applications — all roles */}
               <TabsTrigger
                 value="loans"
                 className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                data-ocid="dashboard.loans.tab"
               >
                 <Wallet className="mr-2 h-4 w-4" />
                 Loan Applications
@@ -2577,19 +3064,45 @@ export function AdminDashboard() {
                   {loanApplications.length}
                 </span>
               </TabsTrigger>
+              {/* EMI Tracker — accounts */}
+              {session?.role === "accounts" && (
+                <TabsTrigger
+                  value="emi"
+                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                  data-ocid="dashboard.emi.tab"
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  EMI Tracker
+                </TabsTrigger>
+              )}
+              {/* Doc Verification — operations */}
+              {session?.role === "operations" && (
+                <TabsTrigger
+                  value="processing"
+                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                  data-ocid="dashboard.processing.tab"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Doc Verification
+                </TabsTrigger>
+              )}
+              {/* Reports — admin, bm, accounts */}
               {permissions.canViewReports && (
                 <TabsTrigger
                   value="reports"
                   className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                  data-ocid="dashboard.reports.tab"
                 >
                   <BarChart2 className="mr-2 h-4 w-4" />
                   Reports
                 </TabsTrigger>
               )}
+              {/* Settings — admin only */}
               {permissions.canViewSettings && (
                 <TabsTrigger
                   value="settings"
                   className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
+                  data-ocid="dashboard.settings.tab"
                 >
                   <Settings className="mr-2 h-4 w-4" />
                   Settings
@@ -2896,14 +3409,6 @@ export function AdminDashboard() {
                           actionLoading={actionLoading}
                           localStatus={localLoanStatuses[id]}
                           permissions={permissions}
-                          isRecommended={recommendedLoans.has(id)}
-                          onRecommend={(rid) =>
-                            setRecommendedLoans((prev) => {
-                              const next = new Set(prev);
-                              next.add(rid);
-                              return next;
-                            })
-                          }
                         />
                       );
                     })}
@@ -2935,6 +3440,24 @@ export function AdminDashboard() {
                 />
               </TabsContent>
             )}
+            {/* ── EMI Tracker Tab (Accounts only) ── */}
+            {session?.role === "accounts" && (
+              <TabsContent value="emi" className="space-y-0">
+                <EMITrackerTab
+                  loanApplications={loanApplications}
+                  localLoanStatuses={localLoanStatuses}
+                />
+              </TabsContent>
+            )}
+            {/* ── Doc Verification Tab (Operations only) ── */}
+            {session?.role === "operations" && (
+              <TabsContent value="processing" className="space-y-0">
+                <DocVerificationTab
+                  loanApplications={loanApplications}
+                  localLoanStatuses={localLoanStatuses}
+                />
+              </TabsContent>
+            )}
             {/* ── Settings Tab ── */}
             {permissions.canViewSettings ? (
               <TabsContent value="settings" className="space-y-0">
@@ -2942,7 +3465,7 @@ export function AdminDashboard() {
               </TabsContent>
             ) : (
               <TabsContent value="settings" className="space-y-0">
-                <AccessDeniedPanel message="Settings tab sirf CEO ke liye accessible hai. Please CEO se contact karein." />
+                <AccessDeniedPanel message="Settings tab sirf Admin ke liye accessible hai. Please Admin se contact karein." />
               </TabsContent>
             )}
           </Tabs>

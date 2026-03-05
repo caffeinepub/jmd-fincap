@@ -1,27 +1,40 @@
 # JMD FinCap
 
 ## Current State
-- Website has a role-based admin login at `/admin/login` with Admin, CEO, Co-Founder roles
-- Forgot Password flow uses OTP that is shown on-screen (demo mode, no real email)
-- Admin panel is accessible only via direct URL `/admin/login` (not in navbar)
-- Customer website is separate from admin access
+- 3-role login system: Admin, CEO, Co-Founder (username/password based)
+- Single `/admin/login` page with role selector tabs
+- Admin Dashboard with role-based permissions
+- Loan applications, contact enquiries, document viewing, sanction letters
+- rolePermissions.ts with 3 roles
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Security PIN authentication** in the Forgot Password flow: before OTP is sent/used, user must enter a 4-digit security PIN (set per role). First-time users see a "Set PIN" prompt. This PIN acts as a 2nd factor before allowing password reset.
-- **Dedicated "Staff Login" page** that is visually separate from the customer website — a clean standalone page at `/staff-login` that redirects to `/admin/login`. The customer website navbar and footer will have NO admin/staff link. The staff login entry point is only known to staff.
+- 2 new roles: BM (Branch Manager) and CRM (Customer Relationship Manager), Accounts, Operations — total 5 roles
+- New credentials:
+  - Admin: admin@jmdfincap.com / Admin@123 (full control)
+  - BM: bm@jmdfincap.com / BM@123 (approve/reject loans, branch ops)
+  - CRM: crm@jmdfincap.com / CRM@123 (add customers, upload docs, create loan apps)
+  - Accounts: accounts@jmdfincap.com / Accounts@123 (EMI payments, financial records)
+  - Operations: operations@jmdfincap.com / Operations@123 (verify docs, process loan files)
+- Login uses email as username (not short handle)
+- Role-specific dashboard tabs/views for each of the 5 roles
+- BM dashboard: loan approval panel, branch team activity, branch reports
+- CRM dashboard: add customer lead, manage customer DB, follow-ups
+- Accounts dashboard: EMI tracker, disbursement records, payment reports
+- Operations dashboard: document verification queue, loan processing status
 
 ### Modify
-- Forgot Password flow in AdminLogin.tsx: add a new `pin-verify` view step before `otp-sent`. User must enter their 4-digit PIN to proceed. If PIN not set, show a "Set PIN" prompt first.
-- PIN is stored per-role in localStorage (`jmd_pin_<roleId>`).
-- The flow becomes: login → forgot-role → pin-verify (enter or set PIN) → otp-sent → reset-password → success
+- rolePermissions.ts: extend to 5 roles (admin, bm, crm, accounts, operations) — remove ceo/cofounder
+- AdminLogin.tsx: update ROLES array to 5 entries with email-based login, new icons
+- AdminDashboard.tsx: update session handling, role label display, tab visibility per role
+- router.tsx: no changes needed
 
 ### Remove
-- Nothing removed from existing functionality
+- CEO and Co-Founder roles from login and permissions
+- Old 3-role system credentials
 
 ## Implementation Plan
-1. In `AdminLogin.tsx`: add PIN state management (view states: `pin-verify`, `set-pin`), PIN storage helpers, and PIN verification UI with 4-digit numeric input
-2. Add PIN setup flow for first-time users (no PIN set yet) — styled input with numeric keypad feel
-3. The forgot password flow: after role select, check if PIN is set. If not set → show Set PIN screen. If set → show Enter PIN screen. After PIN verified → proceed to OTP flow.
-4. Admin login page stays at `/admin/login`. No changes to customer website navbar — admin link already removed.
+1. Update rolePermissions.ts — 5 roles, new permission flags
+2. Update AdminLogin.tsx — 5-role selector with email credentials, new icons
+3. Update AdminDashboard.tsx — role-aware tabs, BM/CRM/Accounts/Operations specific panels

@@ -1,9 +1,8 @@
-export type UserRole = "admin" | "ceo" | "cofounder";
+export type UserRole = "admin" | "bm" | "crm" | "accounts" | "operations";
 
 export interface RolePermissions {
   canApproveLoan: boolean;
   canRejectLoan: boolean;
-  canRecommendApproval: boolean;
   canViewReports: boolean;
   canViewSettings: boolean;
   canManageStaff: boolean;
@@ -13,13 +12,15 @@ export interface RolePermissions {
   canUpdateLoanStatus: boolean;
   canViewLoanData: boolean;
   canViewCustomerData: boolean;
+  canVerifyDocuments: boolean;
+  canProcessLoanFiles: boolean;
+  canManageDisbursement: boolean;
 }
 
 export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
-  ceo: {
+  admin: {
     canApproveLoan: true,
     canRejectLoan: true,
-    canRecommendApproval: false,
     canViewReports: true,
     canViewSettings: true,
     canManageStaff: true,
@@ -29,34 +30,73 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canUpdateLoanStatus: true,
     canViewLoanData: true,
     canViewCustomerData: true,
+    canVerifyDocuments: true,
+    canProcessLoanFiles: true,
+    canManageDisbursement: true,
   },
-  cofounder: {
-    canApproveLoan: false,
-    canRejectLoan: false,
-    canRecommendApproval: true,
+  bm: {
+    canApproveLoan: true,
+    canRejectLoan: true,
     canViewReports: true,
     canViewSettings: false,
     canManageStaff: false,
     canAddCustomer: false,
     canUploadDocuments: false,
     canUpdateEMI: false,
-    canUpdateLoanStatus: false,
+    canUpdateLoanStatus: true,
     canViewLoanData: true,
     canViewCustomerData: true,
+    canVerifyDocuments: false,
+    canProcessLoanFiles: false,
+    canManageDisbursement: false,
   },
-  admin: {
+  crm: {
     canApproveLoan: false,
     canRejectLoan: false,
-    canRecommendApproval: false,
     canViewReports: false,
     canViewSettings: false,
     canManageStaff: false,
     canAddCustomer: true,
     canUploadDocuments: true,
-    canUpdateEMI: true,
+    canUpdateEMI: false,
     canUpdateLoanStatus: true,
     canViewLoanData: true,
     canViewCustomerData: true,
+    canVerifyDocuments: false,
+    canProcessLoanFiles: false,
+    canManageDisbursement: false,
+  },
+  accounts: {
+    canApproveLoan: false,
+    canRejectLoan: false,
+    canViewReports: true,
+    canViewSettings: false,
+    canManageStaff: false,
+    canAddCustomer: false,
+    canUploadDocuments: false,
+    canUpdateEMI: true,
+    canUpdateLoanStatus: false,
+    canViewLoanData: true,
+    canViewCustomerData: false,
+    canVerifyDocuments: false,
+    canProcessLoanFiles: false,
+    canManageDisbursement: true,
+  },
+  operations: {
+    canApproveLoan: false,
+    canRejectLoan: false,
+    canViewReports: false,
+    canViewSettings: false,
+    canManageStaff: false,
+    canAddCustomer: false,
+    canUploadDocuments: true,
+    canUpdateEMI: false,
+    canUpdateLoanStatus: true,
+    canViewLoanData: true,
+    canViewCustomerData: false,
+    canVerifyDocuments: true,
+    canProcessLoanFiles: true,
+    canManageDisbursement: false,
   },
 };
 
@@ -65,25 +105,37 @@ export function getPermissions(role: string): RolePermissions {
 }
 
 export const ROLE_LABELS: Record<string, string> = {
-  ceo: "CEO — Full Access",
-  cofounder: "Co-Founder — Management Access",
-  admin: "Admin / Staff — Limited Access",
+  admin: "Admin — Full Control",
+  bm: "Branch Manager",
+  crm: "CRM Executive",
+  accounts: "Accounts",
+  operations: "Operations",
 };
 
 export const ROLE_DESCRIPTIONS: Record<string, string[]> = {
-  ceo: [
-    "Approve / Reject loans",
-    "View all reports & settings",
-    "Manage staff accounts",
-  ],
-  cofounder: [
-    "View loans & customer data",
-    "View reports & analytics",
-    "Recommend approvals",
-  ],
   admin: [
-    "Add customers & upload documents",
-    "Update EMI & loan status",
-    "No approvals or reports access",
+    "Full system control",
+    "Manage all users & branches",
+    "Reports, settings & documents",
+  ],
+  bm: [
+    "Approve / Reject loan applications",
+    "Monitor CRM team & branch ops",
+    "View branch reports",
+  ],
+  crm: [
+    "Add new customer leads",
+    "Upload documents & create loans",
+    "Manage follow-ups",
+  ],
+  accounts: [
+    "Track EMI & disbursements",
+    "Maintain financial records",
+    "Generate payment reports",
+  ],
+  operations: [
+    "Verify customer documents",
+    "Process loan files",
+    "Update processing status",
   ],
 };
