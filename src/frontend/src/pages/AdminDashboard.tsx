@@ -2667,8 +2667,7 @@ export function AdminDashboard() {
                 alt="JMD FinCap"
                 className="h-12 w-auto object-contain mb-4"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+                  (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
               {/* Role Info Banner */}
@@ -3488,7 +3487,7 @@ export function AdminDashboard() {
 
 // ─── Logo Upload Settings Component ──────────────────────────────────────────
 
-const DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+const DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.png";
 export const LOGO_STORAGE_KEY = "jmd_custom_logo";
 
 export function getActiveLogo(): string {
@@ -3612,7 +3611,7 @@ function LogoUploadSettings() {
                 alt="Current logo"
                 className="max-h-24 w-auto object-contain"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = DEFAULT_LOGO;
+                  (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
             </div>

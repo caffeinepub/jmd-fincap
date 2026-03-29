@@ -25,24 +25,14 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
-  Briefcase,
-  Building2,
+  Camera,
   CheckCircle2,
-  FileText,
   Home,
   Loader2,
-  MapPin,
-  MessageCircle,
-  PenLine,
-  Phone,
-  Upload,
-  User,
-  Users,
-  Wallet,
+  SkipForward,
+  X,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,10 +43,10 @@ interface FilePreview {
   base64: string;
 }
 
-// ─── Image Compression Utility ───────────────────────────────────────────────
+// ─── Image Compression ────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard limit
-const MAX_COMPRESSED_SIZE_BYTES = 800 * 1024; // 800KB soft warning
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_COMPRESSED_SIZE_BYTES = 800 * 1024;
 const COMPRESS_MAX_WIDTH = 800;
 const COMPRESS_QUALITY = 0.7;
 
@@ -90,325 +80,224 @@ function compressImage(file: File): Promise<string> {
   });
 }
 
-// ─── File Upload Field ────────────────────────────────────────────────────────
+// ─── Steps Config ─────────────────────────────────────────────────────────────
 
-interface FileUploadFieldProps {
-  id: string;
-  label: string;
-  accept: string;
-  value: FilePreview | null;
-  onChange: (file: FilePreview | null) => void;
-  hint?: string;
-  required?: boolean;
+const STEPS = [
+  { label: "Personal Details", emoji: "👤" },
+  { label: "Address", emoji: "🏠" },
+  { label: "Identity Proof", emoji: "🪪" },
+  { label: "Work & Income", emoji: "💼" },
+  { label: "Loan Details", emoji: "💰" },
+  { label: "Guarantor 1", emoji: "🤝" },
+  { label: "Guarantor 2", emoji: "🤝" },
+  { label: "Declaration", emoji: "✍️" },
+];
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+
+function ProgressBar({ step, total }: { step: number; total: number }) {
+  const pct = Math.round(((step + 1) / total) * 100);
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-semibold text-navy-900">
+          {STEPS[step].emoji} Step {step + 1} of {total} — {STEPS[step].label}
+        </span>
+        <span className="text-sm font-bold text-gold-600">{pct}%</span>
+      </div>
+      <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-navy-800 to-gold-500 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
-function FileUploadField({
+// ─── Upload Zone ──────────────────────────────────────────────────────────────
+
+interface UploadZoneProps {
+  id: string;
+  label: string;
+  optional?: boolean;
+  accept: string;
+  value: FilePreview | null;
+  onChange: (fp: FilePreview | null) => void;
+  hint?: string;
+}
+
+function UploadZone({
   id,
   label,
+  optional,
   accept,
   value,
   onChange,
   hint,
-  required = false,
-}: FileUploadFieldProps) {
+}: UploadZoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const handleFile = async (file: File) => {
-    // Hard limit: reject files > 5MB
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      toast.error("File too large. Please use a file under 5MB.");
+      toast.error("File bahut badi hai. 5MB se chhoti file chunein.");
       return;
     }
-
     const isImage = file.type.startsWith("image/");
-
     if (isImage) {
       try {
         const compressed = await compressImage(file);
-        // Soft warning if still large after compression
         const byteLength = Math.round((compressed.length * 3) / 4);
         if (byteLength > MAX_COMPRESSED_SIZE_BYTES) {
-          toast.warning(
-            "Image is large even after compression. Consider using a smaller photo.",
-          );
+          toast.warning("Image thodi badi hai. Chhoti photo try karein.");
         }
-        onChange({
-          name: file.name,
-          preview: compressed,
-          base64: compressed,
-        });
+        onChange({ name: file.name, preview: compressed, base64: compressed });
       } catch {
-        // Compression failed — fallback to raw base64
         const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64 = (e.target?.result as string) ?? "";
-          onChange({ name: file.name, preview: base64, base64 });
+        reader.onload = (ev) => {
+          const b64 = ev.target?.result as string;
+          onChange({ name: file.name, preview: b64, base64: b64 });
         };
         reader.readAsDataURL(file);
       }
     } else {
-      // Non-image (PDF etc.) — warn if > 1MB
-      if (file.size > 1024 * 1024) {
-        toast.warning(
-          "PDF is over 1MB. It may not save due to browser storage limits.",
-        );
-      }
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = (e.target?.result as string) ?? "";
-        onChange({ name: file.name, preview: null, base64 });
+      reader.onload = (ev) => {
+        const b64 = ev.target?.result as string;
+        onChange({ name: file.name, preview: null, base64: b64 });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const inputId = `file-input-${id}`;
-
   return (
     <div className="space-y-2">
-      <span className="font-body text-navy-900 text-sm font-medium block">
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </span>
-      <label
-        htmlFor={inputId}
-        className={`relative border-2 border-dashed rounded-2xl transition-all duration-200 cursor-pointer group block ${
-          value
-            ? "border-gold-500 bg-gold-50/60"
-            : "border-gold-500/30 hover:border-gold-500 hover:bg-gold-500/5"
-        }`}
-      >
-        <input
-          id={inputId}
-          type="file"
-          accept={accept}
-          className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
-          }}
-        />
+      <div className="flex items-center gap-2">
+        <Label htmlFor={id} className="text-base font-semibold text-navy-900">
+          {label}
+        </Label>
+        {optional && (
+          <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+        )}
+      </div>
+      {hint && <p className="text-xs text-gray-500">{hint}</p>}
 
-        {value ? (
-          <div className="p-5 flex items-center gap-4">
-            {value.preview ? (
-              <img
-                src={value.preview}
-                alt="Preview"
-                className="h-16 w-16 object-cover rounded-xl border-2 border-gold-200 shrink-0 shadow-sm"
-              />
-            ) : (
-              <div className="h-16 w-16 rounded-xl bg-navy-900 flex items-center justify-center shrink-0 shadow-sm">
-                <FileText className="h-7 w-7 text-gold-500" />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="font-body text-sm font-semibold text-navy-900 truncate">
-                {value.name}
-              </p>
-              <p className="font-body text-xs text-green-600 flex items-center gap-1 mt-1 font-medium">
-                <CheckCircle2 className="h-3 w-3" /> Uploaded successfully
-              </p>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(null);
-                }}
-                className="font-body text-xs text-red-500 hover:text-red-600 mt-1.5 underline focus-visible:outline-none"
-              >
-                Remove
-              </button>
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = "";
+        }}
+      />
+
+      {value ? (
+        <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-green-400 bg-green-50">
+          {value.preview ? (
+            <img
+              src={value.preview}
+              alt="preview"
+              className="h-14 w-14 rounded-lg object-cover border border-green-200 shrink-0"
+            />
+          ) : (
+            <div className="h-14 w-14 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-7 w-7 text-green-600" />
             </div>
-          </div>
-        ) : (
-          <div className="p-8 text-center">
-            <div className="h-12 w-12 mx-auto mb-3 rounded-2xl bg-gold-100/80 group-hover:bg-gold-100 flex items-center justify-center transition-colors">
-              <Upload className="h-6 w-6 text-gold-500 group-hover:text-gold-600 transition-colors" />
-            </div>
-            <p className="font-body text-sm font-semibold text-gray-600 group-hover:text-navy-700 transition-colors">
-              Click to upload
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-green-800 truncate">
+              {value.name}
             </p>
-            {hint && (
-              <p className="font-body text-xs text-gray-400 mt-1">{hint}</p>
-            )}
+            <p className="text-xs text-green-600 mt-0.5">✅ Upload ho gaya!</p>
           </div>
-        )}
-      </label>
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-red-500 hover:bg-red-200 transition-colors shrink-0"
+            aria-label="Remove file"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          data-ocid={`${id}.upload_button`}
+          className="w-full flex items-center justify-center gap-3 h-16 rounded-xl border-2 border-dashed border-gold-300 bg-gold-50 hover:bg-gold-100 hover:border-gold-400 transition-colors text-navy-800 font-semibold text-sm active:scale-95"
+        >
+          <Camera className="h-5 w-5 text-gold-600" />📷 Photo Lein / File
+          Chunein
+        </button>
+      )}
     </div>
   );
 }
 
-// ─── Progress Stepper ─────────────────────────────────────────────────────────
-
-const STEPS = [
-  { label: "Personal", icon: User },
-  { label: "Address", icon: MapPin },
-  { label: "Identity", icon: FileText },
-  { label: "Work", icon: Briefcase },
-  { label: "Loan", icon: Wallet },
-  { label: "Guarantor 1", icon: Users },
-  { label: "Guarantor 2", icon: Users },
-  { label: "Declaration", icon: PenLine },
-];
-
-function Stepper({
-  currentStep,
-  totalSteps,
-}: { currentStep: number; totalSteps: number }) {
-  return (
-    <div className="w-full">
-      {/* Numbered step indicator */}
-      <div className="flex items-center justify-between mb-6 overflow-x-auto pb-2">
-        {STEPS.map((step, idx) => {
-          const isCompleted = idx < currentStep;
-          const isCurrent = idx === currentStep;
-          return (
-            <div
-              key={step.label}
-              className="flex items-center"
-              aria-current={isCurrent ? "step" : undefined}
-            >
-              {/* Circle */}
-              <div className="flex flex-col items-center gap-1.5 relative">
-                <motion.div
-                  animate={{
-                    scale: isCurrent ? 1.1 : 1,
-                  }}
-                  transition={{ duration: 0.2 }}
-                  className={`h-9 w-9 rounded-full flex items-center justify-center text-sm font-bold font-display transition-all duration-300 shadow-sm ${
-                    isCompleted
-                      ? "bg-navy-900 text-gold-400"
-                      : isCurrent
-                        ? "bg-gold-500 text-navy-900 shadow-gold"
-                        : "bg-gray-100 text-gray-400 border-2 border-gray-200"
-                  }`}
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <span>{idx + 1}</span>
-                  )}
-                </motion.div>
-                <span
-                  className={`font-body text-[9px] font-semibold uppercase tracking-wide hidden sm:block whitespace-nowrap ${
-                    isCurrent
-                      ? "text-gold-600"
-                      : isCompleted
-                        ? "text-navy-800"
-                        : "text-gray-400"
-                  }`}
-                >
-                  {step.label}
-                </span>
-              </div>
-
-              {/* Connector line */}
-              {idx < STEPS.length - 1 && (
-                <div className="flex-1 mx-1 h-0.5 min-w-[12px]">
-                  <motion.div
-                    className={`h-full rounded-full transition-colors duration-500 ${
-                      isCompleted ? "bg-gold-500" : "bg-gray-200"
-                    }`}
-                    initial={false}
-                    animate={{ scaleX: 1 }}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progress fraction */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-body text-xs text-gray-400 font-medium">
-          Step {currentStep + 1} of {totalSteps}
-        </span>
-        <span className="font-body text-xs text-gold-600 font-semibold">
-          {Math.round(((currentStep + 1) / totalSteps) * 100)}% Complete
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="relative h-1 bg-gray-100 rounded-full">
-        <motion.div
-          className="absolute inset-y-0 left-0 bg-gradient-to-r from-gold-600 to-gold-400 rounded-full"
-          animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Section Header ───────────────────────────────────────────────────────────
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-  stepNum,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description?: string;
-  stepNum: number;
-}) {
-  return (
-    <div className="flex items-start gap-4 mb-6 pb-5 border-b border-gray-100">
-      <div className="h-12 w-12 rounded-xl bg-navy-900 flex items-center justify-center shrink-0 relative">
-        <Icon className="h-5 w-5 text-gold-500" />
-        <span className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-gold-500 text-navy-900 font-body text-xs font-bold flex items-center justify-center">
-          {stepNum}
-        </span>
-      </div>
-      <div>
-        <h2 className="font-display text-xl font-bold text-navy-900">
-          {title}
-        </h2>
-        {description && (
-          <p className="font-body text-sm text-gray-500 mt-0.5">
-            {description}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Form Field ───────────────────────────────────────────────────────────────
+// ─── Field Wrapper ────────────────────────────────────────────────────────────
 
 function Field({
   label,
   required,
+  optional,
   children,
+  htmlFor,
 }: {
   label: string;
   required?: boolean;
+  optional?: boolean;
   children: React.ReactNode;
+  htmlFor?: string;
 }) {
   return (
     <div className="space-y-2">
-      <Label className="font-body text-navy-900 text-sm font-medium">
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </Label>
+      <div className="flex items-center gap-2">
+        <Label
+          htmlFor={htmlFor}
+          className="text-base font-medium text-navy-900"
+        >
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
+        {optional && <span className="text-xs text-gray-400">(Optional)</span>}
+      </div>
       {children}
     </div>
   );
 }
 
 const inputCls =
-  "font-body border-gray-200 focus:border-gold-500 focus:ring-gold-500 h-11";
+  "h-12 text-base border-gray-200 focus:border-gold-500 focus:ring-gold-500 rounded-xl";
+
+// ─── Step Header ──────────────────────────────────────────────────────────────
+
+function StepHeader({
+  emoji,
+  title,
+  subtitle,
+}: { emoji: string; title: string; subtitle?: string }) {
+  return (
+    <div className="mb-6 pb-5 border-b border-gray-100">
+      <div className="text-4xl mb-2">{emoji}</div>
+      <h2 className="text-2xl font-bold text-navy-900">{title}</h2>
+      {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+    </div>
+  );
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function LoanApplicationPage() {
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor } = useActor();
   const [currentStep, setCurrentStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [applicationId, setApplicationId] = useState("");
 
-  // ── Section 1: Personal Details ──
+  // Section 1
   const [fullName, setFullName] = useState("");
   const [fatherHusbandName, setFatherHusbandName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -416,94 +305,97 @@ export function LoanApplicationPage() {
   const [mobile2, setMobile2] = useState("");
   const [email, setEmail] = useState("");
 
-  // ── Section 2: Address Details ──
+  // Section 2
   const [currentAddress, setCurrentAddress] = useState("");
   const [permanentAddress, setPermanentAddress] = useState("");
   const [nearestLandmark, setNearestLandmark] = useState("");
   const [houseType, setHouseType] = useState("");
 
-  // ── Section 3: Identity Proof ──
+  // Section 3
   const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [panNumber, setPanNumber] = useState("");
-  const [customerPhoto, setCustomerPhoto] = useState<FilePreview | null>(null);
   const [aadhaarCardFile, setAadhaarCardFile] = useState<FilePreview | null>(
     null,
   );
   const [panCardFile, setPanCardFile] = useState<FilePreview | null>(null);
+  const [customerPhoto, setCustomerPhoto] = useState<FilePreview | null>(null);
 
-  // ── Section 4: Work & Income ──
+  // Section 4
   const [occupation, setOccupation] = useState("");
   const [workplaceName, setWorkplaceName] = useState("");
   const [workAddress, setWorkAddress] = useState("");
   const [monthlyIncome, setMonthlyIncome] = useState("");
 
-  // ── Section 5: Loan Details ──
+  // Section 5
   const [loanAmount, setLoanAmount] = useState("");
   const [interestRate, setInterestRate] = useState("");
   const [loanStartDate, setLoanStartDate] = useState("");
   const [loanDuration, setLoanDuration] = useState("");
   const [monthlyEMI, setMonthlyEMI] = useState("");
   const [lateFineRule, setLateFineRule] = useState("");
+  const [loanPurpose, setLoanPurpose] = useState("");
 
-  // ── Section 6: Guarantor 1 ──
+  // Section 6
   const [guarantor1Name, setGuarantor1Name] = useState("");
   const [guarantor1Mobile, setGuarantor1Mobile] = useState("");
   const [guarantor1Relation, setGuarantor1Relation] = useState("");
   const [guarantor1Address, setGuarantor1Address] = useState("");
 
-  // ── Section 7: Guarantor 2 ──
+  // Section 7
   const [guarantor2Name, setGuarantor2Name] = useState("");
   const [guarantor2Mobile, setGuarantor2Mobile] = useState("");
   const [guarantor2Relation, setGuarantor2Relation] = useState("");
   const [guarantor2Address, setGuarantor2Address] = useState("");
 
-  // ── Declaration ──
+  // Section 8
   const [customerSignature, setCustomerSignature] =
     useState<FilePreview | null>(null);
   const [declarationDate, setDeclarationDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [declarationChecked, setDeclarationChecked] = useState(false);
 
-  // ── AI Pre-fill from chat agent ──
+  // AI Agent prefill
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("prefill") === "1") {
       try {
-        const raw = localStorage.getItem("jmd_loan_prefill");
+        const raw = localStorage.getItem("jmd_agent_prefill");
         if (raw) {
-          const d = JSON.parse(raw) as Record<string, string>;
-          if (d.fullName) setFullName(d.fullName);
-          if (d.fatherHusbandName) setFatherHusbandName(d.fatherHusbandName);
-          if (d.dateOfBirth) setDateOfBirth(d.dateOfBirth);
-          if (d.mobile1) setMobile1(d.mobile1);
-          if (d.mobile2) setMobile2(d.mobile2);
-          if (d.email) setEmail(d.email);
-          if (d.currentAddress) setCurrentAddress(d.currentAddress);
-          if (d.permanentAddress) setPermanentAddress(d.permanentAddress);
-          if (d.nearestLandmark) setNearestLandmark(d.nearestLandmark);
-          if (d.houseType) setHouseType(d.houseType);
-          if (d.aadhaarNumber) setAadhaarNumber(d.aadhaarNumber);
-          if (d.panNumber) setPanNumber(d.panNumber);
-          if (d.occupation) setOccupation(d.occupation);
-          if (d.workplaceName) setWorkplaceName(d.workplaceName);
-          if (d.workAddress) setWorkAddress(d.workAddress);
-          if (d.monthlyIncome) setMonthlyIncome(d.monthlyIncome);
-          if (d.loanAmount) setLoanAmount(d.loanAmount);
-          if (d.loanDuration) setLoanDuration(d.loanDuration);
-          if (d.monthlyEMI) setMonthlyEMI(d.monthlyEMI);
-          if (d.guarantor1Name) setGuarantor1Name(d.guarantor1Name);
-          if (d.guarantor1Mobile) setGuarantor1Mobile(d.guarantor1Mobile);
-          if (d.guarantor1Relation) setGuarantor1Relation(d.guarantor1Relation);
-          if (d.guarantor2Name) setGuarantor2Name(d.guarantor2Name);
-          // Clean up
-          localStorage.removeItem("jmd_loan_prefill");
-          // Remove ?prefill=1 from URL
-          window.history.replaceState({}, "", "/apply");
-          toast.success(
-            "AI Agent ne form fill kar diya! Documents upload karein aur submit karein.",
-            { duration: 5000 },
-          );
+          const data = JSON.parse(raw) as Record<string, string>;
+          if (data.fullName) setFullName(data.fullName);
+          if (data.fatherHusbandName)
+            setFatherHusbandName(data.fatherHusbandName);
+          if (data.dateOfBirth) setDateOfBirth(data.dateOfBirth);
+          if (data.mobile1) setMobile1(data.mobile1);
+          if (data.mobile2) setMobile2(data.mobile2);
+          if (data.email) setEmail(data.email);
+          if (data.currentAddress) setCurrentAddress(data.currentAddress);
+          if (data.permanentAddress) setPermanentAddress(data.permanentAddress);
+          if (data.nearestLandmark) setNearestLandmark(data.nearestLandmark);
+          if (data.houseType) setHouseType(data.houseType);
+          if (data.aadhaarNumber) setAadhaarNumber(data.aadhaarNumber);
+          if (data.panNumber) setPanNumber(data.panNumber);
+          if (data.occupation) setOccupation(data.occupation);
+          if (data.workplaceName) setWorkplaceName(data.workplaceName);
+          if (data.workAddress) setWorkAddress(data.workAddress);
+          if (data.monthlyIncome) setMonthlyIncome(data.monthlyIncome);
+          if (data.loanAmount) setLoanAmount(data.loanAmount);
+          if (data.loanDuration) setLoanDuration(data.loanDuration);
+          if (data.loanPurpose) setLoanPurpose(data.loanPurpose);
+          if (data.guarantor1Name) setGuarantor1Name(data.guarantor1Name);
+          if (data.guarantor1Mobile) setGuarantor1Mobile(data.guarantor1Mobile);
+          if (data.guarantor1Relation)
+            setGuarantor1Relation(data.guarantor1Relation);
+          if (data.guarantor1Address)
+            setGuarantor1Address(data.guarantor1Address);
+          localStorage.removeItem("jmd_agent_prefill");
         }
+        window.history.replaceState({}, "", "/apply");
+        toast.success(
+          "AI Agent ne form fill kar diya! Documents upload karein aur submit karein.",
+          { duration: 5000 },
+        );
       } catch {
         /* ignore */
       }
@@ -514,39 +406,41 @@ export function LoanApplicationPage() {
     switch (step) {
       case 0:
         if (!fullName.trim() || !dateOfBirth || !mobile1.trim()) {
-          toast.error("Please fill all required fields in Personal Details.");
+          toast.error("Naam, Janam Tithi aur Mobile Number zaroori hai.");
           return false;
         }
         if (!/^[6-9]\d{9}$/.test(mobile1.trim())) {
-          toast.error("Please enter a valid 10-digit mobile number.");
+          toast.error("Sahi 10 digit ka mobile number dalein.");
           return false;
         }
         return true;
       case 1:
         if (!currentAddress.trim() || !permanentAddress.trim() || !houseType) {
-          toast.error("Please fill all required fields in Address Details.");
+          toast.error(
+            "Current Address, Permanent Address aur Ghar Ka Type zaroori hai.",
+          );
           return false;
         }
         return true;
       case 2:
         if (!aadhaarNumber.trim()) {
-          toast.error("Aadhaar number is required.");
+          toast.error("Aadhaar number zaroori hai.");
           return false;
         }
         if (!/^\d{12}$/.test(aadhaarNumber)) {
-          toast.error("Aadhaar number must be exactly 12 digits.");
+          toast.error("Aadhaar number 12 digit ka hona chahiye.");
           return false;
         }
         return true;
       case 3:
         if (!occupation || !monthlyIncome.trim()) {
-          toast.error("Please fill all required fields in Work & Income.");
+          toast.error("Kaam aur Monthly Income zaroori hai.");
           return false;
         }
         return true;
       case 4:
         if (!loanAmount.trim() || !loanDuration.trim()) {
-          toast.error("Loan Amount and Duration are required.");
+          toast.error("Loan Amount aur Duration zaroori hai.");
           return false;
         }
         return true;
@@ -567,9 +461,13 @@ export function LoanApplicationPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const skipGuarantor = () => {
+    setCurrentStep((s) => Math.min(s + 1, STEPS.length - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const mutation = useMutation({
     mutationFn: async () => {
-      // Build comprehensive application data
       const id = `LOAN-${Date.now()}`;
       const appData = {
         id,
@@ -597,6 +495,7 @@ export function LoanApplicationPage() {
         loanDuration,
         monthlyEMI,
         lateFineRule,
+        loanPurpose,
         guarantor1Name,
         guarantor1Mobile,
         guarantor1Relation,
@@ -610,93 +509,70 @@ export function LoanApplicationPage() {
         declarationDate,
         submittedAt: new Date().toISOString(),
         status: "pending",
-        // Backend-compatible fields
         firstName: fullName.trim().split(" ")[0] ?? fullName,
         lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
         fatherName: fatherHusbandName,
         motherName: "",
         aadharNumber: aadhaarNumber,
-        loanPurpose: `Occupation: ${occupation}. EMI: ${monthlyEMI || "N/A"}. Duration: ${loanDuration}`,
         loanType: "Personal Loan",
         tenure: loanDuration,
         employeeType: occupation,
         aadharCardFile: aadhaarCardFile?.base64 ?? "",
         photoFile: customerPhoto?.base64 ?? "",
         signatureFile: customerSignature?.base64 ?? "",
-        // Timestamp as number for display in dashboard
         timestamp: Date.now(),
       };
 
-      // STEP 1: Save to localStorage FIRST (guaranteed to work)
-      // Save documents separately to avoid quota issues with large JSON blobs
       let savedToLocalStorage = false;
       try {
-        // Save documents separately by application ID (avoids large array quota issues)
         const docData = {
           aadhaarCardFile: aadhaarCardFile?.base64 ?? "",
           panCardFile: panCardFile?.base64 ?? "",
           customerPhoto: customerPhoto?.base64 ?? "",
           customerSignature: customerSignature?.base64 ?? "",
         };
-        // Try combined save first
         let docsSaved = false;
         try {
           localStorage.setItem(`jmd_docs_${id}`, JSON.stringify(docData));
           docsSaved = true;
         } catch {
-          // Combined save failed (quota exceeded) — try saving each document individually
+          /* quota exceeded */
         }
         if (!docsSaved) {
-          let anyDocSaved = false;
-          if (docData.aadhaarCardFile) {
+          if (docData.aadhaarCardFile)
             try {
               localStorage.setItem(
                 `jmd_doc_aadhaar_${id}`,
                 docData.aadhaarCardFile,
               );
-              anyDocSaved = true;
             } catch {
               /* ignore */
             }
-          }
-          if (docData.panCardFile) {
+          if (docData.panCardFile)
             try {
               localStorage.setItem(`jmd_doc_pan_${id}`, docData.panCardFile);
-              anyDocSaved = true;
             } catch {
               /* ignore */
             }
-          }
-          if (docData.customerPhoto) {
+          if (docData.customerPhoto)
             try {
               localStorage.setItem(
                 `jmd_doc_photo_${id}`,
                 docData.customerPhoto,
               );
-              anyDocSaved = true;
             } catch {
               /* ignore */
             }
-          }
-          if (docData.customerSignature) {
+          if (docData.customerSignature)
             try {
               localStorage.setItem(
                 `jmd_doc_signature_${id}`,
                 docData.customerSignature,
               );
-              anyDocSaved = true;
             } catch {
               /* ignore */
             }
-          }
-          if (!anyDocSaved) {
-            toast.warning(
-              "Documents could not be saved due to storage limits. Please use smaller image files.",
-            );
-          }
         }
-
-        // Save application metadata (no large base64 files in the main array)
         const lightApp = {
           ...appData,
           aadhaarCardFile: "",
@@ -714,34 +590,23 @@ export function LoanApplicationPage() {
         existing.push(lightApp);
         localStorage.setItem("jmd_loan_applications", JSON.stringify(existing));
         savedToLocalStorage = true;
-        console.log(
-          "[JMD] Loan application saved to localStorage:",
-          id,
-          "Total:",
-          existing.length,
-        );
       } catch (err) {
         console.error("[JMD] Failed to save to localStorage:", err);
       }
 
-      if (!savedToLocalStorage) {
+      if (!savedToLocalStorage)
         console.warn(
           "[JMD] WARNING: Application could not be saved to localStorage!",
         );
-      }
 
-      // STEP 2: Also try to save to backend (best-effort, don't block submission)
       if (actor) {
         try {
           const nameParts = fullName.trim().split(" ");
-          const firstName = nameParts[0] ?? fullName;
-          const lastName = nameParts.slice(1).join(" ") || "";
-
           await actor.submitLoanApplication(
-            firstName,
-            lastName,
+            nameParts[0] ?? fullName,
+            nameParts.slice(1).join(" ") || "",
             dateOfBirth,
-            "", // motherName
+            "",
             fatherHusbandName,
             aadhaarNumber,
             panNumber,
@@ -751,16 +616,15 @@ export function LoanApplicationPage() {
             loanAmount,
             monthlyIncome,
             occupation,
-            aadhaarCardFile?.base64 ?? "", // aadhaarCardFile — send to backend
-            panCardFile?.base64 ?? "", // panCardFile — send to backend
-            customerPhoto?.base64 ?? "", // photoFile — send to backend
-            customerSignature?.base64 ?? "", // signatureFile — send to backend
+            aadhaarCardFile?.base64 ?? "",
+            panCardFile?.base64 ?? "",
+            customerPhoto?.base64 ?? "",
+            customerSignature?.base64 ?? "",
           );
         } catch {
-          // Backend save failed — data is already in localStorage, so it's fine
+          /* backend save failed — data is in localStorage */
         }
       }
-
       return id;
     },
     onSuccess: (id) => {
@@ -769,7 +633,7 @@ export function LoanApplicationPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
     onError: (err: Error) => {
-      toast.error("Submission failed. Please try again.", {
+      toast.error("Submit nahi hua. Dobara try karein.", {
         description: err.message,
       });
     },
@@ -777,108 +641,64 @@ export function LoanApplicationPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!declarationChecked) {
+      toast.error("Pehle declaration par tick karein.");
+      return;
+    }
     mutation.mutate();
   };
 
   // ── Success Screen ──
   if (submitted) {
     return (
-      <div className="min-h-screen bg-white flex flex-col">
-        <Toaster position="top-right" richColors />
-        <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center">
+      <div
+        className="min-h-screen bg-white flex flex-col"
+        data-ocid="apply.success_state"
+      >
+        <Toaster position="top-center" richColors />
+        <header className="bg-white border-b border-gray-100 py-3 px-5 flex items-center">
           <a href="/" className="flex items-center gap-3">
             <img
               src={getActiveLogo()}
               alt="JMD FinCap"
-              className="h-12 w-auto object-contain"
+              className="h-10 w-auto object-contain"
               onError={(e) => {
                 (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
               }}
             />
-            <span className="font-display text-xl font-bold text-navy-900">
-              JMD FinCap
-            </span>
+            <span className="font-bold text-navy-900 text-lg">JMD FinCap</span>
           </a>
         </header>
-        <main className="flex-1 flex items-center justify-center p-8">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center max-w-lg"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-              className="h-24 w-24 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6"
-            >
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
-            </motion.div>
-            <h1 className="font-display text-3xl font-bold text-navy-900 mb-3">
-              Application Submitted!
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md w-full">
+            <div className="h-28 w-28 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6 animate-bounce-slow">
+              <CheckCircle2 className="h-16 w-16 text-green-500" />
+            </div>
+            <h1 className="text-3xl font-bold text-navy-900 mb-2">
+              🎉 Ho Gaya!
             </h1>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-navy-900 text-gold-500 font-body text-sm font-semibold mb-4">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">
+              Aapki Application Submit Ho Gayi!
+            </h2>
+            <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-navy-900 text-gold-400 font-bold text-sm mb-5">
               Application ID: {applicationId}
             </div>
-            <p className="font-body text-gray-600 leading-relaxed mb-8">
-              Thank you, <strong>{fullName}</strong>. Your loan application has
-              been received. Our team will review your details and contact you
-              on <strong>{mobile1}</strong> within 24 hours.
+            <p className="text-gray-600 text-base leading-relaxed mb-3">
+              Shukriya, <strong>{fullName}</strong>!<br />
+              Hamari team jald hi aapse contact karegi.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <a
-                href="/"
-                className="px-6 py-3 rounded-lg font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 transition-colors text-center"
-              >
-                Back to Home
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubmitted(false);
-                  setCurrentStep(0);
-                  setFullName("");
-                  setFatherHusbandName("");
-                  setDateOfBirth("");
-                  setMobile1("");
-                  setMobile2("");
-                  setEmail("");
-                  setCurrentAddress("");
-                  setPermanentAddress("");
-                  setNearestLandmark("");
-                  setHouseType("");
-                  setAadhaarNumber("");
-                  setPanNumber("");
-                  setAadhaarCardFile(null);
-                  setPanCardFile(null);
-                  setCustomerPhoto(null);
-                  setOccupation("");
-                  setWorkplaceName("");
-                  setWorkAddress("");
-                  setMonthlyIncome("");
-                  setLoanAmount("");
-                  setInterestRate("");
-                  setLoanStartDate("");
-                  setLoanDuration("");
-                  setMonthlyEMI("");
-                  setLateFineRule("");
-                  setGuarantor1Name("");
-                  setGuarantor1Mobile("");
-                  setGuarantor1Relation("");
-                  setGuarantor1Address("");
-                  setGuarantor2Name("");
-                  setGuarantor2Mobile("");
-                  setGuarantor2Relation("");
-                  setGuarantor2Address("");
-                  setCustomerSignature(null);
-                  setDeclarationDate(new Date().toISOString().split("T")[0]);
-                }}
-                className="px-6 py-3 rounded-lg font-body font-semibold text-navy-900 border-2 border-navy-900 hover:bg-navy-900 hover:text-white transition-colors"
-              >
-                New Application
-              </button>
-            </div>
-          </motion.div>
+            <p className="text-gray-500 text-sm mb-8">
+              📞 Hum <strong>{mobile1}</strong> par 24 ghante mein call karenge.
+            </p>
+            <a
+              href="/"
+              data-ocid="apply.primary_button"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-navy-900 bg-gold-500 hover:bg-gold-400 transition-colors text-base"
+            >
+              <Home className="h-5 w-5" />
+              Ghar Jaayein
+            </a>
+          </div>
         </main>
       </div>
     );
@@ -886,10 +706,10 @@ export function LoanApplicationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-center" richColors />
 
-      {/* ─── Header ─── */}
-      <header className="bg-white border-b border-gray-100 py-3 px-6 flex items-center justify-between sticky top-0 z-40">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-100 py-3 px-5 flex items-center justify-between sticky top-0 z-40">
         <a href="/" className="flex items-center gap-3">
           <img
             src={getActiveLogo()}
@@ -899,775 +719,769 @@ export function LoanApplicationPage() {
               (e.target as HTMLImageElement).src = _DEFAULT_LOGO;
             }}
           />
-          <span className="font-display text-lg font-bold text-navy-900 hidden sm:block">
+          <span className="font-bold text-navy-900 text-lg hidden sm:block">
             JMD FinCap
           </span>
         </a>
         <a
           href="/"
-          className="flex items-center gap-2 font-body text-sm font-medium text-gray-500 hover:text-navy-900 transition-colors"
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-navy-900 transition-colors"
+          data-ocid="apply.link"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Home
+          Wapas Jaayein
         </a>
       </header>
 
-      {/* ─── Page Hero ─── */}
-      <div className="bg-navy-900 py-8 px-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold-500/20 border border-gold-500/30 mb-3">
-            <Wallet className="h-3.5 w-3.5 text-gold-500" />
-            <span className="font-body text-xs font-semibold text-gold-500 uppercase tracking-wider">
-              Loan Application Form
-            </span>
-          </div>
-          <h1 className="font-display text-3xl font-bold text-white mb-2">
-            Apply for a <span className="text-gold-500 italic">Loan</span>
+      {/* Top Banner */}
+      <div className="bg-navy-900 py-5 px-5">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-2xl font-bold text-white">
+            💰 Loan Ke Liye Apply Karein
           </h1>
-          <p className="font-body text-white/60 text-sm">
-            Step {currentStep + 1} of {STEPS.length} —{" "}
-            {STEPS[currentStep].label}
+          <p className="text-white/60 text-sm mt-1">
+            Aasaan form — bas kuch minute mein poora karein
           </p>
         </div>
       </div>
 
-      {/* ─── Stepper ─── */}
-      <div className="bg-white border-b border-gray-100 py-5 px-6">
-        <div className="max-w-3xl mx-auto">
-          <Stepper currentStep={currentStep} totalSteps={STEPS.length} />
+      {/* Progress */}
+      <div className="bg-white border-b border-gray-100 py-4 px-5 sticky top-[61px] z-30">
+        <div className="max-w-2xl mx-auto">
+          <ProgressBar step={currentStep} total={STEPS.length} />
         </div>
       </div>
 
-      {/* ─── AI Agent Banner ─── */}
-      <div className="bg-white border-b border-gray-100 py-3 px-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-center gap-4 bg-navy-900 rounded-xl px-5 py-3.5">
-            <div className="h-10 w-10 rounded-full bg-gold-500 flex items-center justify-center shrink-0">
-              <Bot className="h-5 w-5 text-navy-900" aria-hidden="true" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-body text-sm font-semibold text-white leading-tight">
-                AI Agent se form fill karwayein
-              </p>
-              <p className="font-body text-xs text-white/60 mt-0.5">
-                Bass sawaalon ka jawab dein — Agent baaki sambhal lega!
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.setItem("jmd_chat_open_loan", "1");
-                // Dispatch storage event so AIChatWidget on same tab detects it
-                window.dispatchEvent(
-                  new StorageEvent("storage", {
-                    key: "jmd_chat_open_loan",
-                    newValue: "1",
-                  }),
-                );
-                // Also directly open chat by scrolling to it
-                window.scrollTo({
-                  top: document.body.scrollHeight,
-                  behavior: "smooth",
-                });
-                // Reload to trigger the useEffect in AIChatWidget
-                window.location.href = "/?open_loan_agent=1";
-              }}
-              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-500 text-navy-900 font-body text-xs font-semibold hover:bg-gold-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
-            >
-              <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-              Start AI Agent
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Form Content ─── */}
-      <main className="flex-1 py-8 px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3 }}
-            >
-              <form
-                onSubmit={handleSubmit}
-                noValidate
-                id="loan-form"
-                className="bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-100"
-              >
-                {/* ── Step 0: Personal Details ── */}
-                {currentStep === 0 && (
-                  <>
-                    <SectionHeader
-                      icon={User}
-                      title="Personal Details"
-                      description="Basic information about the loan applicant"
-                      stepNum={1}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <div className="sm:col-span-2">
-                        <Field label="Full Name" required>
-                          <Input
-                            placeholder="e.g. Ramesh Kumar Sharma"
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            className={inputCls}
-                            autoComplete="name"
-                          />
-                        </Field>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <Field label="Father / Husband Name" required>
-                          <Input
-                            placeholder="e.g. Rajesh Kumar Sharma"
-                            value={fatherHusbandName}
-                            onChange={(e) =>
-                              setFatherHusbandName(e.target.value)
-                            }
-                            className={inputCls}
-                          />
-                        </Field>
-                      </div>
-                      <Field label="Date of Birth" required>
-                        <Input
-                          type="date"
-                          value={dateOfBirth}
-                          onChange={(e) => setDateOfBirth(e.target.value)}
-                          className={inputCls}
-                          autoComplete="bday"
-                        />
-                      </Field>
-                      <Field label="Mobile Number 1" required>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                          <Input
-                            type="tel"
-                            placeholder="9876543210"
-                            value={mobile1}
-                            onChange={(e) =>
-                              setMobile1(
-                                e.target.value.replace(/\D/g, "").slice(0, 10),
-                              )
-                            }
-                            className={`${inputCls} pl-10`}
-                            inputMode="numeric"
-                            autoComplete="tel"
-                          />
-                        </div>
-                      </Field>
-                      <Field label="Mobile Number 2 (Optional)">
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                          <Input
-                            type="tel"
-                            placeholder="9876543211"
-                            value={mobile2}
-                            onChange={(e) =>
-                              setMobile2(
-                                e.target.value.replace(/\D/g, "").slice(0, 10),
-                              )
-                            }
-                            className={`${inputCls} pl-10`}
-                            inputMode="numeric"
-                          />
-                        </div>
-                      </Field>
-                      <Field label="Email (Optional)">
-                        <Input
-                          type="email"
-                          placeholder="ramesh@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className={inputCls}
-                          autoComplete="email"
-                        />
-                      </Field>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 1: Address Details ── */}
-                {currentStep === 1 && (
-                  <>
-                    <SectionHeader
-                      icon={MapPin}
-                      title="Address Details"
-                      description="Current and permanent residential address"
-                      stepNum={2}
-                    />
-                    <div className="grid gap-5">
-                      <Field label="Current Address" required>
-                        <textarea
-                          placeholder="House No., Street, Area, City, State, PIN"
-                          value={currentAddress}
-                          onChange={(e) => setCurrentAddress(e.target.value)}
-                          rows={3}
-                          className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 outline-none resize-none"
-                        />
-                      </Field>
-                      <Field label="Permanent Address" required>
-                        <div className="flex items-center gap-2 mb-2">
-                          <button
-                            type="button"
-                            onClick={() => setPermanentAddress(currentAddress)}
-                            className="font-body text-xs text-gold-600 hover:text-gold-500 underline focus-visible:outline-none"
-                          >
-                            Same as Current Address
-                          </button>
-                        </div>
-                        <textarea
-                          placeholder="House No., Street, Area, City, State, PIN"
-                          value={permanentAddress}
-                          onChange={(e) => setPermanentAddress(e.target.value)}
-                          rows={3}
-                          className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 outline-none resize-none"
-                        />
-                      </Field>
-                      <div className="grid sm:grid-cols-2 gap-5">
-                        <Field label="Nearest Landmark">
-                          <Input
-                            placeholder="e.g. Near Govt. Hospital"
-                            value={nearestLandmark}
-                            onChange={(e) => setNearestLandmark(e.target.value)}
-                            className={inputCls}
-                          />
-                        </Field>
-                        <Field label="House Type" required>
-                          <Select
-                            value={houseType}
-                            onValueChange={setHouseType}
-                          >
-                            <SelectTrigger className="font-body border-gray-200 focus:ring-gold-500 h-11">
-                              <SelectValue placeholder="Select house type..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="owned" className="font-body">
-                                <Home className="inline h-3.5 w-3.5 mr-2" />
-                                Owned
-                              </SelectItem>
-                              <SelectItem value="rented" className="font-body">
-                                <Building2 className="inline h-3.5 w-3.5 mr-2" />
-                                Rented
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 2: Identity Proof ── */}
-                {currentStep === 2 && (
-                  <>
-                    <SectionHeader
-                      icon={FileText}
-                      title="Identity Proof"
-                      description="Government issued identity documents"
-                      stepNum={3}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <Field label="Aadhaar Number" required>
-                        <Input
-                          type="text"
-                          placeholder="1234 5678 9012"
-                          value={aadhaarNumber}
-                          onChange={(e) =>
-                            setAadhaarNumber(
-                              e.target.value.replace(/\D/g, "").slice(0, 12),
-                            )
-                          }
-                          maxLength={12}
-                          inputMode="numeric"
-                          className={`${inputCls} font-mono tracking-widest`}
-                        />
-                        <p className="font-body text-xs text-gray-400 mt-1">
-                          12-digit Aadhaar number
-                        </p>
-                      </Field>
-                      <Field label="PAN Number (Optional)">
-                        <Input
-                          type="text"
-                          placeholder="ABCDE1234F"
-                          value={panNumber}
-                          onChange={(e) =>
-                            setPanNumber(
-                              e.target.value.toUpperCase().slice(0, 10),
-                            )
-                          }
-                          maxLength={10}
-                          className={`${inputCls} font-mono tracking-widest uppercase`}
-                        />
-                        <p className="font-body text-xs text-gray-400 mt-1">
-                          Format: ABCDE1234F
-                        </p>
-                      </Field>
-                      <div className="sm:col-span-2 border-t border-gray-100 pt-5 mt-2">
-                        <p className="font-body text-sm font-semibold text-navy-900 mb-4">
-                          Document Uploads
-                        </p>
-                        <div className="grid sm:grid-cols-2 gap-5">
-                          <FileUploadField
-                            id="aadhaarCardFile"
-                            label="Aadhaar Card Upload"
-                            accept="image/*,application/pdf"
-                            value={aadhaarCardFile}
-                            onChange={setAadhaarCardFile}
-                            hint="Front & back photo of Aadhaar card (JPG, PNG, PDF)"
-                            required
-                          />
-                          <FileUploadField
-                            id="panCardFile"
-                            label="PAN Card Upload"
-                            accept="image/*,application/pdf"
-                            value={panCardFile}
-                            onChange={setPanCardFile}
-                            hint="Clear photo of PAN card (JPG, PNG, PDF)"
-                          />
-                          <FileUploadField
-                            id="customerPhoto"
-                            label="Customer Photo"
-                            accept="image/*"
-                            value={customerPhoto}
-                            onChange={setCustomerPhoto}
-                            hint="Clear passport-size photo (JPG, PNG)"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 3: Work & Income ── */}
-                {currentStep === 3 && (
-                  <>
-                    <SectionHeader
-                      icon={Briefcase}
-                      title="Work & Income Details"
-                      description="Your current occupation and income information"
-                      stepNum={4}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <Field label="Occupation" required>
-                        <Select
-                          value={occupation}
-                          onValueChange={setOccupation}
-                        >
-                          <SelectTrigger className="font-body border-gray-200 focus:ring-gold-500 h-11">
-                            <SelectValue placeholder="Select occupation..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="job" className="font-body">
-                              Job
-                            </SelectItem>
-                            <SelectItem value="business" className="font-body">
-                              Business
-                            </SelectItem>
-                            <SelectItem value="labour" className="font-body">
-                              Labour
-                            </SelectItem>
-                            <SelectItem value="other" className="font-body">
-                              Other
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Field label="Monthly Income (₹)" required>
-                        <Input
-                          type="number"
-                          placeholder="25000"
-                          value={monthlyIncome}
-                          onChange={(e) => setMonthlyIncome(e.target.value)}
-                          min={0}
-                          inputMode="numeric"
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Workplace / Shop Name">
-                        <Input
-                          placeholder="e.g. Sharma Enterprises"
-                          value={workplaceName}
-                          onChange={(e) => setWorkplaceName(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <div className="sm:col-span-2">
-                        <Field label="Work Address">
-                          <textarea
-                            placeholder="Shop/Office address"
-                            value={workAddress}
-                            onChange={(e) => setWorkAddress(e.target.value)}
-                            rows={2}
-                            className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 outline-none resize-none"
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 4: Loan Details ── */}
-                {currentStep === 4 && (
-                  <>
-                    <SectionHeader
-                      icon={Wallet}
-                      title="Loan Details"
-                      description="Details about the loan amount and repayment"
-                      stepNum={5}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <Field label="Loan Amount (₹)" required>
-                        <Input
-                          type="number"
-                          placeholder="100000"
-                          value={loanAmount}
-                          onChange={(e) => setLoanAmount(e.target.value)}
-                          min={1000}
-                          inputMode="numeric"
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Interest Rate">
-                        <Input
-                          placeholder="e.g. 12% per annum"
-                          value={interestRate}
-                          onChange={(e) => setInterestRate(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Loan Start Date">
-                        <Input
-                          type="date"
-                          value={loanStartDate}
-                          onChange={(e) => setLoanStartDate(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Loan Duration (Months)" required>
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            placeholder="12"
-                            value={
-                              loanDuration
-                                ? loanDuration.replace(/\s*months?\s*/i, "")
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setLoanDuration(val ? `${val} months` : "");
-                            }}
-                            className={`${inputCls} pr-20`}
-                            min={1}
-                            max={360}
-                            inputMode="numeric"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-gray-400 pointer-events-none">
-                            months
-                          </span>
-                        </div>
-                      </Field>
-                      <Field label="Monthly EMI (₹)">
-                        <Input
-                          placeholder="e.g. 9000"
-                          value={monthlyEMI}
-                          onChange={(e) => setMonthlyEMI(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Late Fine Rule">
-                        <Input
-                          placeholder="e.g. Rs 50 per day after due date"
-                          value={lateFineRule}
-                          onChange={(e) => setLateFineRule(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 5: Guarantor 1 ── */}
-                {currentStep === 5 && (
-                  <>
-                    <SectionHeader
-                      icon={Users}
-                      title="Guarantor / Reference 1"
-                      description="First guarantor or reference contact"
-                      stepNum={6}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <Field label="Guarantor Name">
-                        <Input
-                          placeholder="Full name"
-                          value={guarantor1Name}
-                          onChange={(e) => setGuarantor1Name(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Mobile Number">
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                          <Input
-                            type="tel"
-                            placeholder="9876543210"
-                            value={guarantor1Mobile}
-                            onChange={(e) =>
-                              setGuarantor1Mobile(
-                                e.target.value.replace(/\D/g, "").slice(0, 10),
-                              )
-                            }
-                            className={`${inputCls} pl-10`}
-                            inputMode="numeric"
-                          />
-                        </div>
-                      </Field>
-                      <Field label="Relation">
-                        <Input
-                          placeholder="e.g. Brother, Friend, Colleague"
-                          value={guarantor1Relation}
-                          onChange={(e) =>
-                            setGuarantor1Relation(e.target.value)
-                          }
-                          className={inputCls}
-                        />
-                      </Field>
-                      <div className="sm:col-span-2">
-                        <Field label="Address">
-                          <textarea
-                            placeholder="Full residential address"
-                            value={guarantor1Address}
-                            onChange={(e) =>
-                              setGuarantor1Address(e.target.value)
-                            }
-                            rows={3}
-                            className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 outline-none resize-none"
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 6: Guarantor 2 ── */}
-                {currentStep === 6 && (
-                  <>
-                    <SectionHeader
-                      icon={Users}
-                      title="Guarantor / Reference 2"
-                      description="Second guarantor or reference contact"
-                      stepNum={7}
-                    />
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <Field label="Guarantor Name">
-                        <Input
-                          placeholder="Full name"
-                          value={guarantor2Name}
-                          onChange={(e) => setGuarantor2Name(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
-                      <Field label="Mobile Number">
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                          <Input
-                            type="tel"
-                            placeholder="9876543210"
-                            value={guarantor2Mobile}
-                            onChange={(e) =>
-                              setGuarantor2Mobile(
-                                e.target.value.replace(/\D/g, "").slice(0, 10),
-                              )
-                            }
-                            className={`${inputCls} pl-10`}
-                            inputMode="numeric"
-                          />
-                        </div>
-                      </Field>
-                      <Field label="Relation">
-                        <Input
-                          placeholder="e.g. Brother, Friend, Colleague"
-                          value={guarantor2Relation}
-                          onChange={(e) =>
-                            setGuarantor2Relation(e.target.value)
-                          }
-                          className={inputCls}
-                        />
-                      </Field>
-                      <div className="sm:col-span-2">
-                        <Field label="Address">
-                          <textarea
-                            placeholder="Full residential address"
-                            value={guarantor2Address}
-                            onChange={(e) =>
-                              setGuarantor2Address(e.target.value)
-                            }
-                            rows={3}
-                            className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 outline-none resize-none"
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 7: Declaration ── */}
-                {currentStep === 7 && (
-                  <>
-                    <SectionHeader
-                      icon={PenLine}
-                      title="Declaration"
-                      description="Please read and confirm the declaration below"
-                      stepNum={8}
-                    />
-
-                    {/* Application Summary */}
-                    <div className="bg-navy-50 rounded-xl p-5 border border-navy-100 mb-6">
-                      <h3 className="font-body text-sm font-semibold text-navy-900 mb-3">
-                        Application Summary
-                      </h3>
-                      <div className="grid sm:grid-cols-2 gap-3 text-sm font-body">
-                        <div>
-                          <span className="text-gray-500">Applicant:</span>{" "}
-                          <span className="font-semibold text-navy-900">
-                            {fullName}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Mobile:</span>{" "}
-                          <span className="font-semibold text-navy-900">
-                            {mobile1}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Loan Amount:</span>{" "}
-                          <span className="font-semibold text-navy-900">
-                            ₹
-                            {Number(loanAmount).toLocaleString("en-IN") ||
-                              loanAmount}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Duration:</span>{" "}
-                          <span className="font-semibold text-navy-900">
-                            {loanDuration}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Aadhaar:</span>{" "}
-                          <span className="font-mono font-semibold text-navy-900">
-                            {aadhaarNumber.slice(0, 4)} ****{" "}
-                            {aadhaarNumber.slice(-4)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Occupation:</span>{" "}
-                          <span className="font-semibold text-navy-900 capitalize">
-                            {occupation}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Declaration Text */}
-                    <div className="border-2 border-gray-200 rounded-xl p-5 mb-6">
-                      <p className="font-body text-sm text-gray-700 leading-relaxed italic">
-                        "I confirm that all the above information provided in
-                        this loan application is true, accurate and complete to
-                        the best of my knowledge. I agree to repay the loan as
-                        per the terms and conditions set by JMD FinCap. I
-                        understand that providing false information may result
-                        in rejection of my application and legal action."
-                      </p>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <FileUploadField
-                        id="customerSignature"
-                        label="Customer Signature"
-                        accept="image/*"
-                        value={customerSignature}
-                        onChange={setCustomerSignature}
-                        hint="Clear scan/photo of signature"
+      {/* Form Content */}
+      <main className="flex-1 py-6 px-4 sm:px-6">
+        <div className="max-w-2xl mx-auto">
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
+              {/* ── STEP 0: Personal Details ── */}
+              {currentStep === 0 && (
+                <div>
+                  <StepHeader
+                    emoji="👤"
+                    title="Personal Details"
+                    subtitle="Aapki basic jankari"
+                  />
+                  <div className="space-y-5">
+                    <Field label="Poora Naam" required htmlFor="fullName">
+                      <Input
+                        id="fullName"
+                        placeholder="Apna poora naam likhein"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className={inputCls}
+                        autoComplete="name"
                       />
-                      <Field label="Date">
-                        <Input
-                          type="date"
-                          value={declarationDate}
-                          onChange={(e) => setDeclarationDate(e.target.value)}
-                          className={inputCls}
-                        />
-                      </Field>
+                    </Field>
+                    <Field
+                      label="Pita / Pati Ka Naam"
+                      required
+                      htmlFor="fatherName"
+                    >
+                      <Input
+                        id="fatherName"
+                        placeholder="Pita ya pati ka naam"
+                        value={fatherHusbandName}
+                        onChange={(e) => setFatherHusbandName(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Janam Tithi" required htmlFor="dob">
+                      <Input
+                        id="dob"
+                        type="date"
+                        value={dateOfBirth}
+                        onChange={(e) => setDateOfBirth(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Mobile Number 1" required htmlFor="mobile1">
+                      <Input
+                        id="mobile1"
+                        type="tel"
+                        placeholder="10 digit mobile number"
+                        value={mobile1}
+                        onChange={(e) =>
+                          setMobile1(
+                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                        autoComplete="tel"
+                      />
+                    </Field>
+                    <Field label="Mobile Number 2" optional htmlFor="mobile2">
+                      <Input
+                        id="mobile2"
+                        type="tel"
+                        placeholder="Doosra mobile number (optional)"
+                        value={mobile2}
+                        onChange={(e) =>
+                          setMobile2(
+                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field label="Email" optional htmlFor="email">
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="Email address (optional)"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 1: Address Details ── */}
+              {currentStep === 1 && (
+                <div>
+                  <StepHeader
+                    emoji="🏠"
+                    title="Address"
+                    subtitle="Aap kahan rehte hain?"
+                  />
+                  <div className="space-y-5">
+                    <Field
+                      label="Current Address"
+                      required
+                      htmlFor="currentAddr"
+                    >
+                      <textarea
+                        id="currentAddr"
+                        placeholder="Ghar ka poora pata likhein"
+                        value={currentAddress}
+                        onChange={(e) => setCurrentAddress(e.target.value)}
+                        rows={3}
+                        className="w-full text-base border border-gray-200 rounded-xl p-3 focus:border-gold-500 focus:ring-gold-500 focus:outline-none focus:ring-1 resize-none"
+                      />
+                    </Field>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPermanentAddress(currentAddress)}
+                        className="text-xs font-semibold text-gold-600 underline"
+                      >
+                        ✅ Current Address hi Permanent Address hai
+                      </button>
                     </div>
-                  </>
-                )}
-              </form>
-            </motion.div>
-          </AnimatePresence>
+                    <Field
+                      label="Permanent Address"
+                      required
+                      htmlFor="permAddr"
+                    >
+                      <textarea
+                        id="permAddr"
+                        placeholder="Permanent pata (agar current se alag hai)"
+                        value={permanentAddress}
+                        onChange={(e) => setPermanentAddress(e.target.value)}
+                        rows={3}
+                        className="w-full text-base border border-gray-200 rounded-xl p-3 focus:border-gold-500 focus:ring-gold-500 focus:outline-none focus:ring-1 resize-none"
+                      />
+                    </Field>
+                    <Field label="Najdiki Landmark" optional htmlFor="landmark">
+                      <Input
+                        id="landmark"
+                        placeholder="Koi badi jagah / school / mandir ke paas"
+                        value={nearestLandmark}
+                        onChange={(e) => setNearestLandmark(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Ghar Ka Type" required htmlFor="houseType">
+                      <Select value={houseType} onValueChange={setHouseType}>
+                        <SelectTrigger
+                          id="houseType"
+                          className="h-12 text-base rounded-xl border-gray-200"
+                        >
+                          <SelectValue placeholder="Chune — Apna ya Kiraye ka?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Owned">
+                            🏠 Apna Ghar (Owned)
+                          </SelectItem>
+                          <SelectItem value="Rented">
+                            🔑 Kiraye Par (Rented)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                </div>
+              )}
 
-          {/* ─── Navigation Buttons ─── */}
-          <div className="flex items-center justify-between mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleBack}
-              disabled={currentStep === 0}
-              className="font-body text-sm border-gray-200 text-gray-600 hover:text-navy-900 hover:border-navy-900 disabled:opacity-40"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
+              {/* ── STEP 2: Identity Proof ── */}
+              {currentStep === 2 && (
+                <div>
+                  <StepHeader
+                    emoji="🪪"
+                    title="Identity Proof"
+                    subtitle="Aadhaar aur PAN ki jankari"
+                  />
+                  <div className="space-y-6">
+                    <Field label="Aadhaar Number" required htmlFor="aadhaar">
+                      <Input
+                        id="aadhaar"
+                        type="tel"
+                        placeholder="12 digit Aadhaar number"
+                        value={aadhaarNumber}
+                        onChange={(e) =>
+                          setAadhaarNumber(
+                            e.target.value.replace(/\D/g, "").slice(0, 12),
+                          )
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                        maxLength={12}
+                      />
+                      {aadhaarNumber.length > 0 &&
+                        aadhaarNumber.length < 12 && (
+                          <p className="text-xs text-orange-500">
+                            {12 - aadhaarNumber.length} digit aur dalein
+                          </p>
+                        )}
+                    </Field>
+                    <Field label="PAN Number" optional htmlFor="pan">
+                      <Input
+                        id="pan"
+                        placeholder="PAN card number (optional)"
+                        value={panNumber}
+                        onChange={(e) =>
+                          setPanNumber(
+                            e.target.value.toUpperCase().slice(0, 10),
+                          )
+                        }
+                        className={inputCls}
+                      />
+                    </Field>
 
-            {currentStep < STEPS.length - 1 ? (
-              <Button
-                type="button"
-                onClick={handleNext}
-                className="font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 transition-colors px-6"
-              >
-                Next
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                form="loan-form"
-                onClick={handleSubmit}
-                disabled={mutation.isPending || actorFetching}
-                className="font-body font-semibold text-navy-900 bg-gold-500 hover:bg-gold-400 disabled:opacity-60 transition-colors px-8"
-              >
-                {mutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Submit Application
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+                    <div className="border-t border-gray-100 pt-5">
+                      <p className="text-base font-semibold text-navy-900 mb-4">
+                        📄 Documents Upload Karein
+                      </p>
+                      <div className="space-y-5">
+                        <UploadZone
+                          id="aadhaarCard"
+                          label="Aadhaar Card Ki Photo"
+                          accept="image/*,application/pdf"
+                          value={aadhaarCardFile}
+                          onChange={setAadhaarCardFile}
+                          hint="Aadhaar card ke aage aur peeche ki photo"
+                        />
+                        <UploadZone
+                          id="panCard"
+                          label="PAN Card Ki Photo"
+                          optional
+                          accept="image/*,application/pdf"
+                          value={panCardFile}
+                          onChange={setPanCardFile}
+                          hint="PAN card ki saaf photo"
+                        />
+                        <UploadZone
+                          id="customerPhotoUpload"
+                          label="Aapki Photo (Selfie)"
+                          accept="image/*"
+                          value={customerPhoto}
+                          onChange={setCustomerPhoto}
+                          hint="Saaf chehra dikhne wali photo"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="font-body text-xs text-gray-400">
-              © {new Date().getFullYear()} JMD FinCap. All rights reserved. |{" "}
-              <a
-                href="tel:+918889956204"
-                className="hover:text-gold-600 transition-colors"
-              >
-                +91 88899 56204
-              </a>
-            </p>
-          </div>
+              {/* ── STEP 3: Work & Income ── */}
+              {currentStep === 3 && (
+                <div>
+                  <StepHeader
+                    emoji="💼"
+                    title="Kaam aur Kamaai"
+                    subtitle="Aap kya kaam karte hain?"
+                  />
+                  <div className="space-y-5">
+                    <Field label="Kaam Ka Prakar" required htmlFor="occupation">
+                      <Select value={occupation} onValueChange={setOccupation}>
+                        <SelectTrigger
+                          id="occupation"
+                          className="h-12 text-base rounded-xl border-gray-200"
+                        >
+                          <SelectValue placeholder="Apna kaam chune" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Job">👨‍💼 Naukri (Job)</SelectItem>
+                          <SelectItem value="Business">
+                            🏪 Khud Ka Business
+                          </SelectItem>
+                          <SelectItem value="Labour">
+                            🔨 Mazdoori (Labour)
+                          </SelectItem>
+                          <SelectItem value="Other">📋 Kuch Aur</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field
+                      label="Dukaan / Company Ka Naam"
+                      optional
+                      htmlFor="workplace"
+                    >
+                      <Input
+                        id="workplace"
+                        placeholder="Jahan aap kaam karte hain"
+                        value={workplaceName}
+                        onChange={(e) => setWorkplaceName(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field
+                      label="Kaam Ki Jagah Ka Pata"
+                      optional
+                      htmlFor="workAddr"
+                    >
+                      <Input
+                        id="workAddr"
+                        placeholder="Office ya dukaan ka pata"
+                        value={workAddress}
+                        onChange={(e) => setWorkAddress(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field
+                      label="Mahine Ki Kamaai (₹)"
+                      required
+                      htmlFor="income"
+                    >
+                      <Input
+                        id="income"
+                        type="tel"
+                        placeholder="Monthly income kitni hai?"
+                        value={monthlyIncome}
+                        onChange={(e) =>
+                          setMonthlyIncome(e.target.value.replace(/\D/g, ""))
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 4: Loan Details ── */}
+              {currentStep === 4 && (
+                <div>
+                  <StepHeader
+                    emoji="💰"
+                    title="Loan Ki Jankari"
+                    subtitle="Kitna loan chahiye aur kitne time ke liye?"
+                  />
+                  <div className="space-y-5">
+                    <Field
+                      label="Loan Ka Uddeshya"
+                      optional
+                      htmlFor="loanPurpose"
+                    >
+                      <Input
+                        id="loanPurpose"
+                        placeholder="Loan kisliye chahiye? (ghar, padhai, business...)"
+                        value={loanPurpose}
+                        onChange={(e) => setLoanPurpose(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Loan Ki Rashi (₹)" required htmlFor="loanAmt">
+                      <Input
+                        id="loanAmt"
+                        type="tel"
+                        placeholder="Kitna loan chahiye?"
+                        value={loanAmount}
+                        onChange={(e) =>
+                          setLoanAmount(e.target.value.replace(/\D/g, ""))
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field
+                      label="Byaaj Dar (% per annum)"
+                      optional
+                      htmlFor="interest"
+                    >
+                      <Input
+                        id="interest"
+                        placeholder="Interest rate (%) — optional"
+                        value={interestRate}
+                        onChange={(e) => setInterestRate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field
+                      label="Loan Shuru Hone Ki Tithi"
+                      optional
+                      htmlFor="startDate"
+                    >
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={loanStartDate}
+                        onChange={(e) => setLoanStartDate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field
+                      label="Loan Ki Avadhi (Mahine Mein)"
+                      required
+                      htmlFor="duration"
+                    >
+                      <Input
+                        id="duration"
+                        type="tel"
+                        placeholder="Kitne mahine mein wapas karenge?"
+                        value={loanDuration}
+                        onChange={(e) =>
+                          setLoanDuration(e.target.value.replace(/\D/g, ""))
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field label="Mahine Ki EMI (₹)" optional htmlFor="emi">
+                      <Input
+                        id="emi"
+                        type="tel"
+                        placeholder="Har mahine kitna bharenge?"
+                        value={monthlyEMI}
+                        onChange={(e) =>
+                          setMonthlyEMI(e.target.value.replace(/\D/g, ""))
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field
+                      label="Late Fine Ka Niyam"
+                      optional
+                      htmlFor="lateFine"
+                    >
+                      <Input
+                        id="lateFine"
+                        placeholder="Late payment fine (optional)"
+                        value={lateFineRule}
+                        onChange={(e) => setLateFineRule(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 5: Guarantor 1 ── */}
+              {currentStep === 5 && (
+                <div>
+                  <StepHeader
+                    emoji="🤝"
+                    title="Guarantor 1"
+                    subtitle="Koi ek insaan jo aapke liye guarantee de"
+                  />
+
+                  {/* Skip Button - Prominent at top */}
+                  <button
+                    type="button"
+                    onClick={skipGuarantor}
+                    data-ocid="guarantor1.secondary_button"
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors mb-6 font-semibold text-sm"
+                  >
+                    <SkipForward className="h-4 w-4" />
+                    Guarantor Nahi Hai? Skip Karein →
+                  </button>
+
+                  <div className="space-y-5">
+                    <Field
+                      label="Guarantor 1 Ka Naam"
+                      optional
+                      htmlFor="g1name"
+                    >
+                      <Input
+                        id="g1name"
+                        placeholder="Poora naam"
+                        value={guarantor1Name}
+                        onChange={(e) => setGuarantor1Name(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Mobile Number" optional htmlFor="g1mobile">
+                      <Input
+                        id="g1mobile"
+                        type="tel"
+                        placeholder="10 digit mobile number"
+                        value={guarantor1Mobile}
+                        onChange={(e) =>
+                          setGuarantor1Mobile(
+                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field label="Aapka Rishta" optional htmlFor="g1relation">
+                      <Input
+                        id="g1relation"
+                        placeholder="Jaise: bhai, dost, chacha"
+                        value={guarantor1Relation}
+                        onChange={(e) => setGuarantor1Relation(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Address" optional htmlFor="g1addr">
+                      <Input
+                        id="g1addr"
+                        placeholder="Guarantor ka pata"
+                        value={guarantor1Address}
+                        onChange={(e) => setGuarantor1Address(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 6: Guarantor 2 ── */}
+              {currentStep === 6 && (
+                <div>
+                  <StepHeader
+                    emoji="🤝"
+                    title="Guarantor 2"
+                    subtitle="Doosra guarantor (agar hai to)"
+                  />
+
+                  {/* Skip Button - Prominent at top */}
+                  <button
+                    type="button"
+                    onClick={skipGuarantor}
+                    data-ocid="guarantor2.secondary_button"
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors mb-6 font-semibold text-sm"
+                  >
+                    <SkipForward className="h-4 w-4" />
+                    Doosra Guarantor Nahi Hai? Skip Karein →
+                  </button>
+
+                  <div className="space-y-5">
+                    <Field
+                      label="Guarantor 2 Ka Naam"
+                      optional
+                      htmlFor="g2name"
+                    >
+                      <Input
+                        id="g2name"
+                        placeholder="Poora naam"
+                        value={guarantor2Name}
+                        onChange={(e) => setGuarantor2Name(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Mobile Number" optional htmlFor="g2mobile">
+                      <Input
+                        id="g2mobile"
+                        type="tel"
+                        placeholder="10 digit mobile number"
+                        value={guarantor2Mobile}
+                        onChange={(e) =>
+                          setGuarantor2Mobile(
+                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        className={inputCls}
+                        inputMode="numeric"
+                      />
+                    </Field>
+                    <Field label="Aapka Rishta" optional htmlFor="g2relation">
+                      <Input
+                        id="g2relation"
+                        placeholder="Jaise: bhai, dost, chacha"
+                        value={guarantor2Relation}
+                        onChange={(e) => setGuarantor2Relation(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field label="Address" optional htmlFor="g2addr">
+                      <Input
+                        id="g2addr"
+                        placeholder="Guarantor ka pata"
+                        value={guarantor2Address}
+                        onChange={(e) => setGuarantor2Address(e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 7: Declaration ── */}
+              {currentStep === 7 && (
+                <div>
+                  <StepHeader
+                    emoji="✍️"
+                    title="Declaration"
+                    subtitle="Ek baar sab check karein aur confirm karein"
+                  />
+
+                  {/* Summary */}
+                  <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
+                    <p className="text-sm font-semibold text-navy-900 mb-3">
+                      📋 Aapki Details Ka Summary:
+                    </p>
+                    {[
+                      { label: "Naam", value: fullName },
+                      { label: "Mobile", value: mobile1 },
+                      {
+                        label: "Loan Amount",
+                        value: loanAmount ? `₹${loanAmount}` : "—",
+                      },
+                      {
+                        label: "Avadhi",
+                        value: loanDuration ? `${loanDuration} Mahine` : "—",
+                      },
+                      { label: "Kaam", value: occupation || "—" },
+                      {
+                        label: "Aadhaar",
+                        value: aadhaarNumber
+                          ? `XXXX-XXXX-${aadhaarNumber.slice(-4)}`
+                          : "—",
+                      },
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex justify-between text-sm"
+                      >
+                        <span className="text-gray-500">{row.label}</span>
+                        <span className="font-semibold text-navy-900">
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Declaration Text */}
+                  <div className="bg-navy-50 border border-navy-200 rounded-xl p-4 mb-5">
+                    <p className="text-sm text-navy-800 leading-relaxed">
+                      Main confirm karta/karti hoon ki upar di gayi saari
+                      jankari sahi aur poori hai. Main loan ko niyamon ke anusar
+                      wapas karne ka vachan deta/deti hoon.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      I confirm that all the above information is correct and I
+                      agree to repay the loan as per terms.
+                    </p>
+                  </div>
+
+                  {/* Checkbox */}
+                  <label className="flex items-start gap-3 cursor-pointer mb-6 p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-gold-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={declarationChecked}
+                      onChange={(e) => setDeclarationChecked(e.target.checked)}
+                      className="mt-0.5 h-5 w-5 rounded border-gray-300 accent-gold-500 shrink-0"
+                      data-ocid="apply.checkbox"
+                    />
+                    <span className="text-sm font-medium text-navy-900">
+                      ✅ Main agree karta/karti hoon — meri saari jankari sahi
+                      hai
+                    </span>
+                  </label>
+
+                  <UploadZone
+                    id="signatureUpload"
+                    label="Hastaakshar (Signature)"
+                    optional
+                    accept="image/*"
+                    value={customerSignature}
+                    onChange={setCustomerSignature}
+                    hint="Apne hastaakshar ki photo kheench kar upload karein"
+                  />
+
+                  <Field label="Aaj Ki Tithi" optional htmlFor="declDate">
+                    <Input
+                      id="declDate"
+                      type="date"
+                      value={declarationDate}
+                      onChange={(e) => setDeclarationDate(e.target.value)}
+                      className={`${inputCls} mt-3`}
+                    />
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation Buttons */}
+            <div className="flex gap-3 mt-5">
+              {currentStep > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleBack}
+                  data-ocid="apply.secondary_button"
+                  className="flex-1 h-14 text-base font-semibold rounded-xl border-2 border-gray-200"
+                >
+                  <ArrowLeft className="h-5 w-5 mr-2" />
+                  Peeche
+                </Button>
+              )}
+
+              {currentStep < STEPS.length - 1 ? (
+                <Button
+                  type="button"
+                  onClick={handleNext}
+                  data-ocid="apply.primary_button"
+                  className="flex-1 h-14 text-base font-bold rounded-xl bg-gold-500 hover:bg-gold-400 text-navy-900 border-0"
+                >
+                  Aage Badhe
+                  <ArrowRight className="h-5 w-5 ml-2" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={mutation.isPending || !declarationChecked}
+                  data-ocid="apply.submit_button"
+                  className="flex-1 h-14 text-base font-bold rounded-xl bg-navy-900 hover:bg-navy-800 text-white border-0"
+                >
+                  {mutation.isPending ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Submit
+                      Ho Raha Hai...
+                    </>
+                  ) : (
+                    <>✅ Application Submit Karein</>
+                  )}
+                </Button>
+              )}
+            </div>
+          </form>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="py-4 text-center text-xs text-gray-400 border-t border-gray-100 bg-white">
+        © {new Date().getFullYear()} JMD FinCap. Built with love using{" "}
+        <a
+          href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-gray-600"
+        >
+          caffeine.ai
+        </a>
+      </footer>
     </div>
   );
 }

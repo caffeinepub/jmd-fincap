@@ -45,8 +45,7 @@ import { router } from "./router";
 
 // ─── Logo Helper ──────────────────────────────────────────────────────────────
 
-const DEFAULT_LOGO_SRC =
-  "/assets/generated/jmd-fincap-logo-real.dim_500x500.jpg";
+const DEFAULT_LOGO_SRC = "/assets/generated/jmd-fincap-logo-real.png";
 const LOGO_STORAGE_KEY = "jmd_custom_logo";
 
 function getActiveLogo(): string {
@@ -279,7 +278,7 @@ function Navbar() {
             alt="JMD FinCap logo"
             className="h-14 w-auto object-contain"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = DEFAULT_LOGO_SRC;
+              (e.target as HTMLImageElement).style.display = "none";
             }}
           />
         </button>
@@ -1360,7 +1359,7 @@ function Footer() {
               alt="JMD FinCap"
               className="h-14 w-auto mb-5 object-contain"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = DEFAULT_LOGO_SRC;
+                (e.target as HTMLImageElement).style.display = "none";
               }}
             />
             <p className="font-body text-white/45 text-sm leading-relaxed mb-6 max-w-xs">
