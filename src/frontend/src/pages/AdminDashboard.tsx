@@ -1,6 +1,16 @@
-import type { ContactFormSubmission, LoanApplication } from "@/backend.d";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -8,8 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Toaster } from "@/components/ui/sonner";
 import {
   Table,
   TableBody,
@@ -19,3703 +27,2238 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import { useQuery } from "@tanstack/react-query";
 import {
-  ROLE_DESCRIPTIONS,
-  ROLE_LABELS,
-  type RolePermissions,
-  getPermissions,
-} from "@/utils/rolePermissions";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  BarChart2,
+  BarChart3,
+  Bell,
+  BookOpen,
+  Briefcase,
   Building2,
-  Calendar,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
-  Clock,
+  ClipboardList,
   CreditCard,
   Download,
-  ExternalLink,
-  Eye,
   FileText,
-  Image,
-  Inbox,
-  LayoutDashboard,
+  GitBranch,
   Loader2,
-  Lock,
   LogOut,
   Menu,
-  MinusCircle,
   Phone,
-  RefreshCw,
+  Plus,
   Search,
   Settings,
   Shield,
-  ThumbsDown,
-  ThumbsUp,
   TrendingUp,
   Upload,
+  UserCheck,
   Users,
   Wallet,
   X,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { toast } from "sonner";
 
-// ─── Timestamp Utility ────────────────────────────────────────────────────────
+const LOGO = "/assets/JMD_FINCAP_LOGO-removebg-preview-1.png";
 
-function safeTimestampToBigInt(ts: unknown): bigint {
-  if (typeof ts === "bigint") return ts;
-  if (typeof ts === "number" && !Number.isNaN(ts))
-    return BigInt(Math.floor(ts));
-  if (typeof ts === "string") {
-    const cleaned = ts.replace(/n$/, "").trim();
-    if (cleaned && !Number.isNaN(Number(cleaned))) return BigInt(cleaned);
-  }
-  return BigInt(0);
-}
+type RoleId = "admin" | "bm" | "crm" | "accounts" | "operations";
 
-function formatTimestamp(ns: unknown): string {
-  try {
-    const nsBig = safeTimestampToBigInt(ns);
-    const ms =
-      nsBig > BigInt(1e15)
-        ? Number(nsBig / BigInt(1_000_000)) // nanoseconds → ms
-        : nsBig > BigInt(1e12)
-          ? Number(nsBig / BigInt(1_000)) // microseconds → ms
-          : Number(nsBig); // already ms
-    const date = new Date(ms);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return "—";
-  }
-}
+type SidebarSection =
+  | "dashboard"
+  | "leads"
+  | "customers"
+  | "loans"
+  | "documents"
+  | "followups"
+  | "emi"
+  | "reports"
+  | "users"
+  | "branches"
+  | "settings";
 
-function isToday(ns: unknown): boolean {
-  try {
-    const nsBig = safeTimestampToBigInt(ns);
-    const ms =
-      nsBig > BigInt(1e15)
-        ? Number(nsBig / BigInt(1_000_000))
-        : nsBig > BigInt(1e12)
-          ? Number(nsBig / BigInt(1_000))
-          : Number(nsBig);
-    const date = new Date(ms);
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  } catch {
-    return false;
-  }
-}
-
-// ─── CSV Export ───────────────────────────────────────────────────────────────
-
-function exportEnquiriesToCSV(submissions: ContactFormSubmission[]) {
-  const headers = [
-    "#",
-    "Name",
-    "Phone",
-    "Email",
-    "Service",
-    "Message",
-    "Date/Time",
-  ];
-  const rows = submissions.map((s, i) => [
-    i + 1,
-    `"${s.name}"`,
-    `"${s.phone}"`,
-    `"${s.email}"`,
-    `"${s.serviceInterest}"`,
-    `"${s.message.replace(/"/g, '""')}"`,
-    `"${formatTimestamp(s.timestamp)}"`,
-  ]);
-
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `jmd-fincap-enquiries-${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportLoanApplicationsToCSV(apps: LoanApplication[]) {
-  const headers = [
-    "#",
-    "First Name",
-    "Last Name",
-    "DOB",
-    "Mother Name",
-    "Father Name",
-    "Aadhar",
-    "PAN",
-    "Loan Type",
-    "Loan Purpose",
-    "Loan Amount",
-    "Tenure",
-    "Employee Type",
-    "Monthly Income",
-    "Date/Time",
-  ];
-  const rows = apps.map((a, i) => [
-    i + 1,
-    `"${a.firstName}"`,
-    `"${a.lastName}"`,
-    `"${a.dateOfBirth}"`,
-    `"${a.motherName}"`,
-    `"${a.fatherName}"`,
-    `"${a.aadharNumber}"`,
-    `"${a.panNumber}"`,
-    `"${a.loanType}"`,
-    `"${a.loanPurpose}"`,
-    `"${a.loanAmount}"`,
-    `"${a.tenure}"`,
-    `"${a.employeeType}"`,
-    `"${a.monthlyIncome}"`,
-    `"${formatTimestamp(a.timestamp)}"`,
-  ]);
-
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `jmd-fincap-loans-${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ─── Count-Up Animation ───────────────────────────────────────────────────────
-
-function CountUp({ target }: { target: number }) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (target === 0) return;
-    const duration = 1000;
-    const steps = 40;
-    const stepSize = target / steps;
-    let current = 0;
-    const interval = setInterval(() => {
-      current = Math.min(current + stepSize, target);
-      setCount(Math.round(current));
-      if (current >= target) clearInterval(interval);
-    }, duration / steps);
-    return () => clearInterval(interval);
-  }, [target]);
-
-  return <span>{count}</span>;
-}
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-
-interface StatCardProps {
+interface SidebarItem {
+  id: SidebarSection;
+  label: string;
   icon: React.ElementType;
-  label: string;
-  value: string | number;
-  animate?: boolean;
-  numericValue?: number;
-  delay?: number;
-  accent?: boolean;
+  roles: RoleId[];
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  animate,
-  numericValue,
-  delay = 0,
-  accent = false,
-}: StatCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: "easeOut" }}
-      className="bg-white rounded-xl shadow-xs border border-gray-100 hover:shadow-premium transition-all duration-300 group overflow-hidden"
-    >
-      {/* Gold top border accent */}
-      <div
-        className={`h-[3px] w-full ${accent ? "bg-gold-500" : "bg-gradient-to-r from-gold-600 to-gold-400"}`}
-      />
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div
-            className={`h-11 w-11 rounded-xl flex items-center justify-center group-hover:bg-gold-500 transition-colors duration-300 ${
-              accent ? "bg-gold-500" : "bg-navy-900"
-            }`}
-          >
-            <Icon
-              className={`h-5 w-5 transition-colors duration-300 group-hover:text-navy-900 ${
-                accent
-                  ? "text-navy-900 group-hover:text-navy-900"
-                  : "text-gold-500"
-              }`}
-            />
-          </div>
-          <div className="h-2 w-2 rounded-full bg-green-400 mt-1" />
-        </div>
-        <div className="font-display text-3xl font-bold text-navy-900 mb-1">
-          {animate && typeof numericValue === "number" ? (
-            <CountUp target={numericValue} />
-          ) : (
-            value
-          )}
-        </div>
-        <div className="font-body text-sm text-gray-500">{label}</div>
-      </div>
-    </motion.div>
-  );
-}
+const SIDEBAR_ITEMS: SidebarItem[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: BarChart3,
+    roles: ["admin", "bm", "crm", "accounts", "operations"],
+  },
+  {
+    id: "leads",
+    label: "Leads",
+    icon: TrendingUp,
+    roles: ["admin", "bm", "crm"],
+  },
+  {
+    id: "customers",
+    label: "Customers",
+    icon: Users,
+    roles: ["admin", "bm", "crm"],
+  },
+  {
+    id: "loans",
+    label: "Loan Applications",
+    icon: FileText,
+    roles: ["admin", "bm", "crm", "operations"],
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    icon: ClipboardList,
+    roles: ["admin", "crm", "operations"],
+  },
+  {
+    id: "followups",
+    label: "Follow-ups",
+    icon: Phone,
+    roles: ["admin", "crm"],
+  },
+  {
+    id: "emi",
+    label: "EMI Management",
+    icon: CreditCard,
+    roles: ["admin", "accounts"],
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    icon: BookOpen,
+    roles: ["admin", "bm", "accounts"],
+  },
+  { id: "users", label: "User Management", icon: UserCheck, roles: ["admin"] },
+  {
+    id: "branches",
+    label: "Branch Management",
+    icon: GitBranch,
+    roles: ["admin", "bm"],
+  },
+  { id: "settings", label: "Settings", icon: Settings, roles: ["admin"] },
+];
 
-// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+// ─── Mock Data ────────────────────────────────────────────────────────────────────
 
-function TableSkeleton() {
-  return (
-    <div className="space-y-3">
-      {["sk1", "sk2", "sk3", "sk4", "sk5"].map((sk) => (
-        <div
-          key={sk}
-          className="flex gap-4 items-center px-4 py-3 bg-gray-50 rounded-lg"
-        >
-          <Skeleton className="h-4 w-8" />
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-      ))}
-    </div>
-  );
-}
+const MOCK_LEADS = [
+  {
+    id: "LD001",
+    name: "Rajesh Sharma",
+    phone: "9876543210",
+    city: "Khargone",
+    loanType: "Personal",
+    amount: "2,50,000",
+    source: "Website",
+    crm: "Priya S.",
+    status: "New",
+  },
+  {
+    id: "LD002",
+    name: "Sunita Patel",
+    phone: "9765432109",
+    city: "Barwani",
+    loanType: "Business",
+    amount: "5,00,000",
+    source: "Referral",
+    crm: "Rahul K.",
+    status: "Contacted",
+  },
+  {
+    id: "LD003",
+    name: "Mohan Verma",
+    phone: "9654321098",
+    city: "Indore",
+    loanType: "Gold",
+    amount: "1,50,000",
+    source: "Walk-in",
+    crm: "Priya S.",
+    status: "Interested",
+  },
+  {
+    id: "LD004",
+    name: "Geeta Mishra",
+    phone: "9543210987",
+    city: "Sendhwa",
+    loanType: "Home",
+    amount: "12,00,000",
+    source: "Campaign",
+    crm: "Ankit R.",
+    status: "Follow-up",
+  },
+  {
+    id: "LD005",
+    name: "Ajay Yadav",
+    phone: "9432109876",
+    city: "Khargone",
+    loanType: "Personal",
+    amount: "1,00,000",
+    source: "Website",
+    crm: "Rahul K.",
+    status: "Converted",
+  },
+];
 
-function CardSkeleton() {
-  return (
-    <div className="space-y-4">
-      {["sk1", "sk2", "sk3"].map((sk) => (
-        <div
-          key={sk}
-          className="bg-white rounded-xl p-6 border border-gray-100 space-y-3"
-        >
-          <div className="flex gap-3">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="space-y-1.5 flex-1">
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-3 w-24" />
-            </div>
-          </div>
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-3/4" />
-        </div>
-      ))}
-    </div>
-  );
-}
+const MOCK_CUSTOMERS = [
+  {
+    id: "CU001",
+    name: "Rajesh Sharma",
+    phone: "9876543210",
+    city: "Khargone",
+    employment: "Salaried",
+    income: "₹45,000",
+    status: "Active",
+  },
+  {
+    id: "CU002",
+    name: "Sunita Patel",
+    phone: "9765432109",
+    city: "Barwani",
+    employment: "Business",
+    income: "₹75,000",
+    status: "Active",
+  },
+  {
+    id: "CU003",
+    name: "Mohan Verma",
+    phone: "9654321098",
+    city: "Indore",
+    employment: "Salaried",
+    income: "₹32,000",
+    status: "Pending",
+  },
+  {
+    id: "CU004",
+    name: "Geeta Mishra",
+    phone: "9543210987",
+    city: "Sendhwa",
+    employment: "Self-Employed",
+    income: "₹60,000",
+    status: "Approved",
+  },
+];
 
-// ─── Message Cell ─────────────────────────────────────────────────────────────
+const MOCK_FOLLOWUPS = [
+  {
+    customer: "Rajesh Sharma",
+    phone: "9876543210",
+    date: "2026-03-31",
+    notes: "Interested in personal loan, needs more info",
+    crm: "Priya S.",
+  },
+  {
+    customer: "Sunita Patel",
+    phone: "9765432109",
+    date: "2026-04-02",
+    notes: "Business loan docs pending",
+    crm: "Rahul K.",
+  },
+  {
+    customer: "Mohan Verma",
+    phone: "9654321098",
+    date: "2026-04-05",
+    notes: "Gold loan valuation done",
+    crm: "Ankit R.",
+  },
+];
 
-function MessageCell({ message }: { message: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const truncated = message.length > 60;
+const MOCK_EMI = [
+  {
+    loanId: "LN001",
+    customer: "Rajesh Sharma",
+    amount: "₹8,500",
+    dueDate: "2026-04-01",
+    status: "Pending",
+  },
+  {
+    loanId: "LN002",
+    customer: "Sunita Patel",
+    amount: "₹12,300",
+    dueDate: "2026-04-05",
+    status: "Paid",
+  },
+  {
+    loanId: "LN003",
+    customer: "Mohan Verma",
+    amount: "₹6,700",
+    dueDate: "2026-04-10",
+    status: "Pending",
+  },
+  {
+    loanId: "LN004",
+    customer: "Geeta Mishra",
+    amount: "₹18,500",
+    dueDate: "2026-04-15",
+    status: "Overdue",
+  },
+];
 
-  return (
-    <div className="max-w-[200px]">
-      <p className="font-body text-sm text-gray-700 leading-relaxed">
-        {expanded || !truncated ? message : `${message.slice(0, 60)}...`}
-      </p>
-      {truncated && (
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-xs text-gold-600 hover:text-gold-500 font-body font-medium flex items-center gap-0.5 focus-visible:outline-none"
-        >
-          {expanded ? (
-            <>
-              Less <ChevronUp className="h-3 w-3" />
-            </>
-          ) : (
-            <>
-              More <ChevronDown className="h-3 w-3" />
-            </>
-          )}
-        </button>
-      )}
-    </div>
-  );
-}
+const MOCK_DOCS = [
+  {
+    id: "D001",
+    customer: "Rajesh Sharma",
+    type: "Aadhaar",
+    uploadedAt: "2026-03-15",
+    status: "Verified",
+    size: "1.2 MB",
+  },
+  {
+    id: "D002",
+    customer: "Rajesh Sharma",
+    type: "PAN",
+    uploadedAt: "2026-03-15",
+    status: "Verified",
+    size: "0.8 MB",
+  },
+  {
+    id: "D003",
+    customer: "Sunita Patel",
+    type: "Bank Statement",
+    uploadedAt: "2026-03-18",
+    status: "Pending",
+    size: "2.5 MB",
+  },
+  {
+    id: "D004",
+    customer: "Mohan Verma",
+    type: "Salary Slip",
+    uploadedAt: "2026-03-20",
+    status: "Rejected",
+    size: "1.1 MB",
+  },
+  {
+    id: "D005",
+    customer: "Geeta Mishra",
+    type: "Photo",
+    uploadedAt: "2026-03-22",
+    status: "Verified",
+    size: "0.5 MB",
+  },
+];
 
-// ─── Service Badge ────────────────────────────────────────────────────────────
+const MOCK_USERS = [
+  {
+    id: 1,
+    name: "Arun Sharma",
+    email: "admin@jmdfincap.com",
+    role: "Admin",
+    status: "Active",
+    lastLogin: "2026-03-29",
+  },
+  {
+    id: 2,
+    name: "Vikram Singh",
+    email: "bm@jmdfincap.com",
+    role: "Branch Manager",
+    status: "Active",
+    lastLogin: "2026-03-28",
+  },
+  {
+    id: 3,
+    name: "Priya Soni",
+    email: "crm@jmdfincap.com",
+    role: "CRM",
+    status: "Active",
+    lastLogin: "2026-03-29",
+  },
+  {
+    id: 4,
+    name: "Neha Gupta",
+    email: "accounts@jmdfincap.com",
+    role: "Accounts",
+    status: "Active",
+    lastLogin: "2026-03-27",
+  },
+  {
+    id: 5,
+    name: "Ravi Patel",
+    email: "operations@jmdfincap.com",
+    role: "Operations",
+    status: "Active",
+    lastLogin: "2026-03-29",
+  },
+];
 
-const SERVICE_COLORS: Record<string, string> = {
-  "Home Loans": "bg-blue-50 text-blue-700 border-blue-200",
-  "Business Loans": "bg-purple-50 text-purple-700 border-purple-200",
-  "Investment Planning": "bg-green-50 text-green-700 border-green-200",
-  Insurance: "bg-orange-50 text-orange-700 border-orange-200",
-  "Mutual Funds": "bg-teal-50 text-teal-700 border-teal-200",
-  "Tax Planning": "bg-rose-50 text-rose-700 border-rose-200",
+const MOCK_BRANCHES = [
+  {
+    id: "BR001",
+    name: "Khargone Main Branch",
+    manager: "Vikram Singh",
+    city: "Khargone",
+    customers: 1250,
+    loans: 340,
+    status: "Active",
+  },
+  {
+    id: "BR002",
+    name: "Barwani Branch",
+    manager: "Sanjay Kumar",
+    city: "Barwani",
+    customers: 680,
+    loans: 180,
+    status: "Active",
+  },
+  {
+    id: "BR003",
+    name: "Sendhwa Branch",
+    manager: "Rajesh Jain",
+    city: "Sendhwa",
+    customers: 420,
+    loans: 115,
+    status: "Active",
+  },
+];
+
+const CHART_DATA = {
+  monthlyDisbursal: [
+    { month: "Oct", amount: 42 },
+    { month: "Nov", amount: 65 },
+    { month: "Dec", amount: 58 },
+    { month: "Jan", amount: 78 },
+    { month: "Feb", amount: 90 },
+    { month: "Mar", amount: 84 },
+  ],
+  leadConversion: [
+    { name: "Converted", value: 35 },
+    { name: "In Progress", value: 40 },
+    { name: "Lost", value: 25 },
+  ],
+  branchPerformance: [
+    { month: "Jan", khargone: 120, barwani: 80, sendhwa: 60 },
+    { month: "Feb", khargone: 145, barwani: 95, sendhwa: 72 },
+    { month: "Mar", khargone: 168, barwani: 110, sendhwa: 85 },
+  ],
 };
 
-function ServiceBadge({ service }: { service: string }) {
-  const cls =
-    SERVICE_COLORS[service] || "bg-gray-50 text-gray-700 border-gray-200";
-  return (
-    <span
-      className={`inline-flex px-2.5 py-1 rounded-full text-xs font-body font-semibold border ${cls}`}
-    >
-      {service}
-    </span>
-  );
-}
+const PIE_COLORS = ["#c9a84c", "#1a2e5a", "#ef4444"];
 
-// ─── Employee Type Badge ──────────────────────────────────────────────────────
-
-const EMP_LABELS: Record<string, string> = {
-  job: "Job",
-  salaried: "Salaried",
-  "self-employed": "Self Employed",
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-700",
+  approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+  disbursed: "bg-blue-100 text-blue-700",
+  Active: "bg-green-100 text-green-700",
+  New: "bg-blue-100 text-blue-700",
+  Contacted: "bg-yellow-100 text-yellow-700",
+  Interested: "bg-purple-100 text-purple-700",
+  "Follow-up": "bg-orange-100 text-orange-700",
+  Converted: "bg-green-100 text-green-700",
+  Verified: "bg-green-100 text-green-700",
+  Pending: "bg-yellow-100 text-yellow-700",
+  Rejected: "bg-red-100 text-red-700",
+  Paid: "bg-green-100 text-green-700",
+  Overdue: "bg-red-100 text-red-700",
 };
 
-function EmployeeBadge({ type }: { type: string }) {
+function StatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-body font-semibold border bg-navy-50 text-navy-800 border-navy-200">
-      {EMP_LABELS[type] ?? type}
-    </span>
-  );
-}
-
-// ─── Document Viewer Modal ────────────────────────────────────────────────────
-
-function DocumentViewerModal({
-  isOpen,
-  onClose,
-  title,
-  dataUrl,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  dataUrl: string;
-}) {
-  if (!isOpen) return null;
-
-  const isPdf = dataUrl.startsWith("data:application/pdf");
-  const isImage = dataUrl.startsWith("data:image");
-
-  const handleDownload = () => {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = title.replace(/\s+/g, "_").toLowerCase();
-    a.click();
-  };
-
-  return (
-    <dialog
-      open
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent border-0 max-w-none w-full h-full m-0"
-      aria-label={title}
+    <Badge
+      className={`text-xs border-0 ${STATUS_BADGE[status] || "bg-gray-100 text-gray-600"}`}
     >
-      {/* Backdrop */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click closes modal */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.92 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.92 }}
-        transition={{ duration: 0.2 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden z-10"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-navy-900 flex items-center justify-center">
-              <FileText className="h-4 w-4 text-gold-500" />
-            </div>
-            <div>
-              <div className="font-body text-sm font-semibold text-navy-900">
-                {title}
-              </div>
-              <div className="font-body text-xs text-gray-400">
-                {isPdf ? "PDF Document" : "Image"}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold bg-navy-900 text-gold-500 hover:bg-navy-700 transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-navy-900 hover:bg-gray-100 transition-colors"
-              aria-label="Close viewer"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-4 bg-gray-50 flex items-center justify-center min-h-0">
-          {isImage ? (
-            <img
-              src={dataUrl}
-              alt={title}
-              className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
-            />
-          ) : isPdf ? (
-            <iframe
-              src={dataUrl}
-              title={title}
-              className="w-full h-[500px] rounded-lg border border-gray-200"
-            />
-          ) : (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="font-body text-sm text-gray-500">
-                Preview not available for this file type.
-              </p>
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="mt-3 font-body text-sm text-gold-600 hover:text-gold-500 underline"
-              >
-                Download to view
-              </button>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </dialog>
+      {status}
+    </Badge>
   );
 }
 
-// ─── Document Indicator ───────────────────────────────────────────────────────
+// ─── Dashboard Section ─────────────────────────────────────────────────────────────
 
-function DocIndicator({
-  label,
-  uploaded,
-  dataUrl,
-  onView,
-}: {
-  label: string;
-  uploaded: boolean;
-  dataUrl?: string;
-  onView?: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        {uploaded ? (
-          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-        ) : (
-          <MinusCircle className="h-3.5 w-3.5 text-gray-300 shrink-0" />
-        )}
-        <span
-          className={`font-body text-xs ${uploaded ? "text-green-600" : "text-gray-400"}`}
-        >
-          {label}
-        </span>
-      </div>
-      {uploaded && dataUrl && onView && (
-        <button
-          type="button"
-          onClick={onView}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md font-body text-xs font-semibold bg-navy-900 text-gold-500 hover:bg-navy-700 transition-colors w-fit"
-        >
-          <Eye className="h-3 w-3" />
-          View
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Loan Review Modal ───────────────────────────────────────────────────────
-
-function LoanReviewModal({
-  app,
-  rawApp,
-  onConfirm,
-  onCancel,
-  isLoading,
-}: {
-  app: LoanApplication;
-  rawApp: Record<string, unknown>;
-  onConfirm: () => void;
-  onCancel: () => void;
-  isLoading: boolean;
-}) {
-  const name =
-    (rawApp.fullName as string) || `${app.firstName} ${app.lastName}`.trim();
-  const mobile1 = (rawApp.mobile1 as string) || "";
-  const mobile2 = (rawApp.mobile2 as string) || "";
-  const currentAddress = (rawApp.currentAddress as string) || "";
-  const occupation = (rawApp.occupation as string) || app.employeeType || "";
-  const loanAmt = app.loanAmount
-    ? `₹${Number(app.loanAmount).toLocaleString("en-IN")}`
-    : "—";
-  const income = app.monthlyIncome
-    ? `₹${Number(app.monthlyIncome).toLocaleString("en-IN")}`
-    : "—";
-  const aadhaar = (rawApp.aadhaarNumber as string) || app.aadharNumber || "";
-  const masked =
-    aadhaar.length >= 8
-      ? `${aadhaar.slice(0, 4)} •••• ${aadhaar.slice(-4)}`
-      : aadhaar;
-
-  return (
-    <dialog
-      open
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent border-0 max-w-none w-full h-full m-0"
-      aria-label="Review before approve"
-    >
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click closes modal, keyboard users use the Close button */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.93 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.93 }}
-        transition={{ duration: 0.2 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden z-10"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-navy-900">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-gold-500/20 flex items-center justify-center">
-              <AlertTriangle className="h-4 w-4 text-gold-400" />
-            </div>
-            <div>
-              <div className="font-body text-sm font-semibold text-white">
-                Review Before Approving
-              </div>
-              <div className="font-body text-xs text-white/50">
-                Please verify all details carefully
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6 space-y-4">
-          {/* Personal */}
-          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-            <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Personal Details
-            </div>
-            <DetailRow label="Full Name" value={name} />
-            <DetailRow
-              label="Father / Husband"
-              value={
-                (rawApp.fatherHusbandName as string) || app.fatherName || "—"
-              }
-            />
-            <DetailRow label="Date of Birth" value={app.dateOfBirth || "—"} />
-            {mobile1 && (
-              <DetailRow
-                label="Mobile 1"
-                value={mobile1}
-                icon={<Phone className="h-3 w-3" />}
-              />
-            )}
-            {mobile2 && (
-              <DetailRow
-                label="Mobile 2"
-                value={mobile2}
-                icon={<Phone className="h-3 w-3" />}
-              />
-            )}
-            {currentAddress && (
-              <DetailRow label="Address" value={currentAddress} />
-            )}
-          </div>
-
-          {/* Identity */}
-          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-            <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Identity & Work
-            </div>
-            <DetailRow label="Aadhaar" value={masked} mono />
-            <DetailRow label="PAN" value={app.panNumber || "N/A"} mono />
-            <DetailRow label="Occupation" value={occupation} />
-            <DetailRow label="Monthly Income" value={income} />
-          </div>
-
-          {/* Loan */}
-          <div className="bg-green-50 rounded-xl p-4 border border-green-200 space-y-3">
-            <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">
-              Loan Details
-            </div>
-            <DetailRow label="Loan Amount" value={loanAmt} highlight />
-            <DetailRow
-              label="Duration"
-              value={(rawApp.loanDuration as string) || app.tenure || "—"}
-            />
-            <DetailRow
-              label="Interest Rate"
-              value={(rawApp.interestRate as string) || "N/A"}
-            />
-            <DetailRow
-              label="Monthly EMI"
-              value={
-                (rawApp.monthlyEMI as string)
-                  ? `₹${Number(rawApp.monthlyEMI).toLocaleString("en-IN")}`
-                  : "—"
-              }
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end bg-gray-50">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            className="font-body text-xs border-gray-200 text-gray-600"
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
-          >
-            {isLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <ThumbsUp className="h-3.5 w-3.5" />
-            )}
-            Confirm Approve
-          </Button>
-        </div>
-      </motion.div>
-    </dialog>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  mono = false,
-  highlight = false,
-  icon,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  highlight?: boolean;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="font-body text-xs text-gray-500 shrink-0 w-28">
-        {label}
-      </span>
-      <span
-        className={`font-body text-xs text-right ${mono ? "font-mono" : "font-medium"} ${highlight ? "text-green-700 font-bold" : "text-navy-900"} flex items-center gap-1`}
-      >
-        {icon}
-        {value || "—"}
-      </span>
-    </div>
-  );
-}
-
-// ─── Loan Application Card ────────────────────────────────────────────────────
-
-function LoanApplicationCard({
-  app,
-  idx,
-  onApprove,
-  onReject,
-  actionLoading,
-  localStatus,
-  permissions,
-}: {
-  app: LoanApplication;
-  idx: number;
-  onApprove: (app: LoanApplication) => void;
-  onReject: (app: LoanApplication) => void;
-  actionLoading: string | null;
-  localStatus?: "pending" | "approved" | "rejected";
-  permissions: RolePermissions;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [viewerDoc, setViewerDoc] = useState<{
-    title: string;
-    dataUrl: string;
-  } | null>(null);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-
-  // Get raw app data (includes all fields including mobile, documents etc.)
-  const rawApp = app as unknown as Record<string, unknown>;
-
-  const appId =
-    (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
-
-  // Try to read full app data (with base64 files) from localStorage
-  // Documents are stored separately under jmd_docs_<id> to avoid quota issues
-  const storedDocs = (() => {
-    try {
-      // New format: documents stored together per application ID
-      const separateDocs = localStorage.getItem(`jmd_docs_${appId}`);
-      if (separateDocs)
-        return JSON.parse(separateDocs) as Record<string, string>;
-
-      // Individual document keys fallback (when combined save failed due to quota)
-      const aadhaar = localStorage.getItem(`jmd_doc_aadhaar_${appId}`);
-      const pan = localStorage.getItem(`jmd_doc_pan_${appId}`);
-      const photo = localStorage.getItem(`jmd_doc_photo_${appId}`);
-      const signature = localStorage.getItem(`jmd_doc_signature_${appId}`);
-      if (aadhaar ?? pan ?? photo ?? signature) {
-        const individualDocs: Record<string, string> = {};
-        if (aadhaar) individualDocs.aadhaarCardFile = aadhaar;
-        if (pan) individualDocs.panCardFile = pan;
-        if (photo) individualDocs.customerPhoto = photo;
-        if (signature) individualDocs.customerSignature = signature;
-        return individualDocs;
-      }
-
-      // Legacy format: documents embedded in the application object
-      const raw = localStorage.getItem(`jmd_approved_loan_${appId}`);
-      if (raw) return JSON.parse(raw) as Record<string, string>;
-      // Also check the general loan applications store (legacy)
-      const allApps = JSON.parse(
-        localStorage.getItem("jmd_loan_applications") ?? "[]",
-      ) as Record<string, string>[];
-      return allApps.find((a) => a.id === appId) ?? null;
-    } catch {
-      return null;
-    }
-  })();
-
-  // Resolve document URLs -- check backend fields first, then localStorage fallback
-  const resolveDoc = (...keys: string[]): string => {
-    for (const key of keys) {
-      // 1. Check rawApp (backend data has actual base64 files)
-      const fromRaw = rawApp[key] as string;
-      if (fromRaw?.startsWith("data:")) return fromRaw;
-      // 2. Check separate localStorage docs storage (per application ID)
-      const fromDocs = storedDocs?.[key] as string;
-      if (fromDocs?.startsWith("data:")) return fromDocs;
-    }
-    return "";
-  };
-
-  const aadhaarDocUrl = resolveDoc(
-    "aadhaarCardFile",
-    "aadharCardFile",
-    "aadhaar_card",
-  );
-  const panDocUrl = resolveDoc("panCardFile", "pan_card");
-  const photoUrl = resolveDoc("customerPhoto", "photoFile", "photo");
-  const signatureUrl = resolveDoc(
-    "customerSignature",
-    "signatureFile",
-    "signature",
-  );
-
-  // Mobile numbers
-  const mobile1 = (rawApp.mobile1 as string) || "";
-  const mobile2 = (rawApp.mobile2 as string) || "";
-
-  const maskedAadhar = (() => {
-    const num = (rawApp.aadhaarNumber as string) || app.aadharNumber || "";
-    return num.length >= 8 ? `${num.slice(0, 4)} •••• ${num.slice(-4)}` : num;
-  })();
-
-  const formattedAmount = Number.isNaN(Number(app.loanAmount))
-    ? app.loanAmount
-    : `₹${Number(app.loanAmount).toLocaleString("en-IN")}`;
-
-  const formattedIncome = Number.isNaN(Number(app.monthlyIncome))
-    ? app.monthlyIncome
-    : `₹${Number(app.monthlyIncome).toLocaleString("en-IN")}`;
-
-  const isThisLoading = actionLoading === appId;
-
-  // Determine status: prefer backend status field, then local override
-  const backendStatus = rawApp.status as string | undefined;
-  const effectiveStatus: "pending" | "approved" | "rejected" =
-    localStatus ??
-    (backendStatus === "approved"
-      ? "approved"
-      : backendStatus === "rejected"
-        ? "rejected"
-        : "pending");
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: idx * 0.04, duration: 0.35 }}
-      className="bg-white rounded-xl border border-gray-100 shadow-xs hover:shadow-premium transition-all duration-300 overflow-hidden"
-    >
-      {/* Card Header */}
-      <div className="px-6 py-4 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="h-11 w-11 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
-            <span className="font-body text-sm font-bold text-gold-500">
-              {app.firstName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <div className="font-body text-base font-semibold text-navy-900">
-              {(rawApp.fullName as string) ||
-                `${app.firstName} ${app.lastName}`}
-            </div>
-            <div className="font-body text-xs text-gray-400 mt-0.5">
-              DOB: {app.dateOfBirth} &nbsp;·&nbsp;{" "}
-              {formatTimestamp(app.timestamp)}
-            </div>
-            {mobile1 && (
-              <div className="flex items-center gap-1 mt-0.5">
-                <Phone className="h-3 w-3 text-gray-400" />
-                <a
-                  href={`tel:${mobile1}`}
-                  className="font-body text-xs text-gold-600 hover:text-gold-500 font-mono"
-                >
-                  {mobile1}
-                </a>
-                {mobile2 && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <a
-                      href={`tel:${mobile2}`}
-                      className="font-body text-xs text-gold-600 hover:text-gold-500 font-mono"
-                    >
-                      {mobile2}
-                    </a>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          <LoanStatusBadge status={effectiveStatus} />
-          <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-body font-semibold border bg-gold-50 text-gold-700 border-gold-200">
-            {app.loanType || "Personal Loan"}
-          </span>
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="text-gray-400 hover:text-navy-900 transition-colors p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
-            aria-label={expanded ? "Collapse details" : "Expand details"}
-          >
-            {expanded ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Summary row */}
-      <div className="px-6 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-gray-50">
-        <div>
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Loan Amount
-          </div>
-          <div className="font-body text-sm font-semibold text-navy-900">
-            {formattedAmount}
-          </div>
-        </div>
-        <div>
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Duration
-          </div>
-          <div className="font-body text-sm font-semibold text-navy-900">
-            {(() => {
-              const dur = (rawApp.loanDuration as string) || app.tenure || "";
-              if (!dur) return "—";
-              if (dur.toLowerCase().includes("month")) return dur;
-              return `${dur} months`;
-            })()}
-          </div>
-        </div>
-        <div>
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Monthly Income
-          </div>
-          <div className="font-body text-sm font-semibold text-navy-900">
-            {formattedIncome}
-          </div>
-        </div>
-        <div>
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-            Occupation
-          </div>
-          <EmployeeBadge
-            type={(rawApp.occupation as string) || app.employeeType}
-          />
-        </div>
-      </div>
-
-      {/* Action Row */}
-      <div className="px-6 pb-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
-        {effectiveStatus === "pending" && (
-          <>
-            {/* Admin / BM: Approve button */}
-            {permissions.canApproveLoan && (
-              <Button
-                size="sm"
-                onClick={() => setShowReviewModal(true)}
-                disabled={isThisLoading}
-                className="font-body text-xs bg-green-600 hover:bg-green-700 text-white font-semibold gap-1.5"
-                data-ocid="loans.confirm_button"
-              >
-                {isThisLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ThumbsUp className="h-3.5 w-3.5" />
-                )}
-                Approve
-              </Button>
-            )}
-            {/* Admin / BM: Reject button */}
-            {permissions.canRejectLoan && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onReject(app)}
-                disabled={isThisLoading}
-                className="font-body text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5"
-                data-ocid="loans.delete_button"
-              >
-                {isThisLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ThumbsDown className="h-3.5 w-3.5" />
-                )}
-                Reject
-              </Button>
-            )}
-            {/* No approval access — show info */}
-            {!permissions.canApproveLoan && !permissions.canRejectLoan && (
-              <span className="inline-flex items-center gap-1.5 font-body text-xs text-gray-400 italic">
-                <Lock className="h-3.5 w-3.5" />
-                Approval: Contact Admin or Branch Manager
-              </span>
-            )}
-          </>
-        )}
-        {effectiveStatus === "approved" && (
-          <a
-            href={`/sanction-letter?id=${encodeURIComponent(appId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body font-semibold bg-navy-900 text-gold-500 hover:bg-navy-800 transition-colors"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            View Sanction Letter
-            <ExternalLink className="h-3 w-3 opacity-60" />
-          </a>
-        )}
-        {effectiveStatus === "rejected" && (
-          <span className="font-body text-xs text-gray-400 italic">
-            Application has been rejected
-          </span>
-        )}
-      </div>
-
-      {/* Expanded Details */}
-      {expanded && (
-        <div className="border-t border-gray-100 px-6 py-5 bg-gray-50/50 space-y-5">
-          {/* Document numbers */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Aadhaar Number
-              </div>
-              <div className="font-body text-sm font-mono text-navy-900">
-                {maskedAadhar}
-              </div>
-            </div>
-            <div>
-              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                PAN Number
-              </div>
-              <div className="font-body text-sm font-mono text-navy-900">
-                {app.panNumber || "—"}
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile numbers */}
-          {(mobile1 || mobile2) && (
-            <div className="grid grid-cols-2 gap-4">
-              {mobile1 && (
-                <div>
-                  <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                    Mobile 1
-                  </div>
-                  <div className="font-body text-sm font-mono text-navy-900">
-                    {mobile1}
-                  </div>
-                </div>
-              )}
-              {mobile2 && (
-                <div>
-                  <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                    Mobile 2
-                  </div>
-                  <div className="font-body text-sm font-mono text-navy-900">
-                    {mobile2}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Address */}
-          {(rawApp.currentAddress as string) && (
-            <div>
-              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Current Address
-              </div>
-              <div className="font-body text-sm text-navy-900">
-                {rawApp.currentAddress as string}
-              </div>
-            </div>
-          )}
-
-          {/* Family info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Father / Husband
-              </div>
-              <div className="font-body text-sm text-navy-900">
-                {(rawApp.fatherHusbandName as string) || app.fatherName || "—"}
-              </div>
-            </div>
-            <div>
-              <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Loan Purpose / Occupation
-              </div>
-              <div className="font-body text-sm text-navy-900">
-                {app.loanPurpose}
-              </div>
-            </div>
-          </div>
-
-          {/* Documents uploaded */}
-          <div>
-            <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-3">
-              Documents Uploaded
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <DocIndicator
-                label="Aadhaar Card"
-                uploaded={!!aadhaarDocUrl}
-                dataUrl={aadhaarDocUrl}
-                onView={
-                  aadhaarDocUrl
-                    ? () =>
-                        setViewerDoc({
-                          title: `Aadhaar Card — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
-                          dataUrl: aadhaarDocUrl,
-                        })
-                    : undefined
-                }
-              />
-              <DocIndicator
-                label="PAN Card"
-                uploaded={!!panDocUrl}
-                dataUrl={panDocUrl}
-                onView={
-                  panDocUrl
-                    ? () =>
-                        setViewerDoc({
-                          title: `PAN Card — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
-                          dataUrl: panDocUrl,
-                        })
-                    : undefined
-                }
-              />
-              <DocIndicator
-                label="Photo"
-                uploaded={!!photoUrl}
-                dataUrl={photoUrl}
-                onView={
-                  photoUrl
-                    ? () =>
-                        setViewerDoc({
-                          title: `Customer Photo — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
-                          dataUrl: photoUrl,
-                        })
-                    : undefined
-                }
-              />
-              <DocIndicator
-                label="Signature"
-                uploaded={!!signatureUrl}
-                dataUrl={signatureUrl}
-                onView={
-                  signatureUrl
-                    ? () =>
-                        setViewerDoc({
-                          title: `Signature — ${(rawApp.fullName as string) || `${app.firstName} ${app.lastName}`}`,
-                          dataUrl: signatureUrl,
-                        })
-                    : undefined
-                }
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Document Viewer Modal */}
-      <AnimatePresence>
-        {viewerDoc && (
-          <DocumentViewerModal
-            isOpen={!!viewerDoc}
-            onClose={() => setViewerDoc(null)}
-            title={viewerDoc.title}
-            dataUrl={viewerDoc.dataUrl}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Review Modal before Approve */}
-      <AnimatePresence>
-        {showReviewModal && (
-          <LoanReviewModal
-            app={app}
-            rawApp={rawApp}
-            onConfirm={() => {
-              setShowReviewModal(false);
-              onApprove(app);
-            }}
-            onCancel={() => setShowReviewModal(false)}
-            isLoading={isThisLoading}
-          />
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-// ─── Role Info Helper ─────────────────────────────────────────────────────────
-
-interface SessionData {
-  token: string;
-  role: string;
-  roleLabel: string;
-  username: string;
-}
-
-function getSession(): SessionData | null {
-  try {
-    const raw = localStorage.getItem("adminSession");
-    if (raw) return JSON.parse(raw) as SessionData;
-    // backward compat: old token only
-    const token = localStorage.getItem("jmd_admin_token");
-    if (token)
-      return {
-        token,
-        role: "admin",
-        roleLabel: "Administrator",
-        username: "admin",
-      };
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Role badge color map
-const ROLE_BADGE_COLORS: Record<string, string> = {
-  admin: "text-yellow-400",
-  bm: "text-blue-400",
-  crm: "text-green-400",
-  accounts: "text-purple-400",
-  operations: "text-orange-400",
-};
-
-function RoleIcon({ role }: { role: string }) {
-  if (role === "bm")
-    return <Building2 className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.bm}`} />;
-  if (role === "crm")
-    return <Users className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.crm}`} />;
-  if (role === "accounts")
-    return <Wallet className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.accounts}`} />;
-  if (role === "operations")
-    return (
-      <Settings className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.operations}`} />
-    );
-  return <Shield className={`h-3.5 w-3.5 ${ROLE_BADGE_COLORS.admin}`} />;
-}
-
-// Role display label map
-const ROLE_DISPLAY_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  bm: "Branch Manager",
-  crm: "CRM Executive",
-  accounts: "Accounts",
-  operations: "Operations",
-};
-
-// ─── Session Timeout Warning Modal ───────────────────────────────────────────
-
-function SessionTimeoutModal({
-  countdown,
-  onExtend,
-  onLogout,
-}: {
-  countdown: number;
-  onExtend: () => void;
-  onLogout: () => void;
-}) {
-  const minutes = Math.floor(countdown / 60);
-  const seconds = countdown % 60;
-  const urgency = countdown <= 60;
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.92 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.92 }}
-        transition={{ duration: 0.2 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
-      >
-        {/* Top accent */}
-        <div
-          className={`h-1 w-full ${urgency ? "bg-red-500" : "bg-amber-500"}`}
-        />
-        <div className="p-6 text-center">
-          <div
-            className={`h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4 ${urgency ? "bg-red-100" : "bg-amber-100"}`}
-          >
-            <Clock
-              className={`h-8 w-8 ${urgency ? "text-red-500" : "text-amber-500"}`}
-            />
-          </div>
-          <h2 className="font-display text-xl font-bold text-navy-900 mb-2">
-            Session Expiring Soon
-          </h2>
-          <p className="font-body text-sm text-gray-500 mb-4">
-            Inactivity ke karan aapka session expire hone wala hai. Session
-            extend karein ya logout karein.
-          </p>
-
-          {/* Countdown */}
-          <div
-            className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl font-mono text-2xl font-bold mb-6 ${
-              urgency
-                ? "bg-red-50 text-red-600 border border-red-200"
-                : "bg-amber-50 text-amber-600 border border-amber-200"
-            }`}
-          >
-            <Clock className="h-5 w-5" />
-            {String(minutes).padStart(2, "0")}:
-            {String(seconds).padStart(2, "0")}
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onLogout}
-              className="flex-1 font-body text-sm border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-600"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout Now
-            </Button>
-            <Button
-              onClick={onExtend}
-              className={`flex-1 font-body text-sm font-semibold ${
-                urgency
-                  ? "bg-red-500 hover:bg-red-600 text-white"
-                  : "bg-amber-500 hover:bg-amber-600 text-white"
-              }`}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Extend Session
-            </Button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-// ─── Access Denied Panel ──────────────────────────────────────────────────────
-
-function AccessDeniedPanel({ message }: { message: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="bg-white rounded-xl border border-gray-100 shadow-xs py-20 text-center"
-    >
-      <div className="h-16 w-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center mx-auto mb-4">
-        <Lock className="h-7 w-7 text-gray-400" />
-      </div>
-      <h3 className="font-display text-lg font-semibold text-gray-700 mb-2">
-        Access Restricted
-      </h3>
-      <p className="font-body text-sm text-gray-500 max-w-xs mx-auto">
-        {message}
-      </p>
-    </motion.div>
-  );
-}
-
-// ─── Reports & Analytics Tab ──────────────────────────────────────────────────
-
-function ReportsTab({
+function DashboardSection({
+  role: _role,
   loanApplications,
-  submissions,
-  localLoanStatuses,
-}: {
-  loanApplications: LoanApplication[];
-  submissions: ContactFormSubmission[];
-  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
-}) {
-  const stats = useMemo(() => {
-    const total = loanApplications.length;
-    let approved = 0;
-    let rejected = 0;
-    let pending = 0;
-    let totalAmount = 0;
+}: { role: RoleId; loanApplications: any[] }) {
+  const allApps = [
+    ...loanApplications,
+    ...JSON.parse(localStorage.getItem("loanApplications") || "[]"),
+  ];
 
-    for (const app of loanApplications) {
-      const rawApp = app as unknown as Record<string, unknown>;
-      const id =
-        (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
-      const status =
-        localLoanStatuses[id] ??
-        ((rawApp.status as string) === "approved"
-          ? "approved"
-          : (rawApp.status as string) === "rejected"
-            ? "rejected"
-            : "pending");
-      if (status === "approved") approved++;
-      else if (status === "rejected") rejected++;
-      else pending++;
-      const amt = Number(app.loanAmount);
-      if (!Number.isNaN(amt)) totalAmount += amt;
-    }
+  const approved = allApps.filter((a) => a.status === "approved").length;
+  const rejected = allApps.filter((a) => a.status === "rejected").length;
+  const pending = allApps.filter(
+    (a) => !a.status || a.status === "pending",
+  ).length;
 
-    return { total, approved, rejected, pending, totalAmount };
-  }, [loanApplications, localLoanStatuses]);
-
-  const approvalRate =
-    stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
-
-  const serviceBreakdown = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const s of submissions) {
-      map[s.serviceInterest] = (map[s.serviceInterest] || 0) + 1;
-    }
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [submissions]);
+  const stats = [
+    {
+      label: "Total Leads",
+      value: "245",
+      icon: TrendingUp,
+      color: "from-blue-500 to-blue-600",
+      sub: "+12 today",
+    },
+    {
+      label: "New Leads Today",
+      value: "12",
+      icon: Plus,
+      color: "from-emerald-500 to-emerald-600",
+      sub: "Across all branches",
+    },
+    {
+      label: "Total Customers",
+      value: "2,350",
+      icon: Users,
+      color: "from-purple-500 to-purple-600",
+      sub: "+28 this month",
+    },
+    {
+      label: "Approved Loans",
+      value: String(approved || 34),
+      icon: CheckCircle2,
+      color: "from-green-500 to-green-600",
+      sub: "This month",
+    },
+    {
+      label: "Rejected Loans",
+      value: String(rejected || 8),
+      icon: X,
+      color: "from-red-500 to-red-600",
+      sub: "This month",
+    },
+    {
+      label: "Disbursed Loans",
+      value: "18",
+      icon: Wallet,
+      color: "from-teal-500 to-teal-600",
+      sub: "₹1.8Cr disbursed",
+    },
+    {
+      label: "Pending Applications",
+      value: String(pending || 24),
+      icon: Loader2,
+      color: "from-yellow-500 to-yellow-600",
+      sub: "Requires action",
+    },
+    {
+      label: "Total Loan Amount",
+      value: "₹48.5Cr",
+      icon: BarChart3,
+      color: "from-gold-500 to-gold-600",
+      sub: "FY 2025-26",
+    },
+  ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.5 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-navy-900 flex items-center justify-center">
-            <BarChart2 className="h-5 w-5 text-gold-500" />
-          </div>
-          <div>
-            <h2 className="font-display text-lg font-bold text-navy-900">
-              Reports & Analytics
-            </h2>
-            <p className="font-body text-xs text-gray-500">
-              Loan portfolio and enquiry breakdown
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Loan Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Total Applications",
-            value: stats.total,
-            color: "text-navy-900",
-            bg: "bg-navy-50",
-          },
-          {
-            label: "Approved",
-            value: stats.approved,
-            color: "text-green-700",
-            bg: "bg-green-50",
-          },
-          {
-            label: "Rejected",
-            value: stats.rejected,
-            color: "text-red-700",
-            bg: "bg-red-50",
-          },
-          {
-            label: "Pending",
-            value: stats.pending,
-            color: "text-amber-700",
-            bg: "bg-amber-50",
-          },
-        ].map((item) => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat) => (
           <div
-            key={item.label}
-            className={`${item.bg} rounded-xl p-5 border border-white`}
+            key={stat.label}
+            className={`bg-gradient-to-br ${stat.color} rounded-xl p-5 text-white`}
+            data-ocid={`dashboard.${stat.label.toLowerCase().replace(/ /g, "_")}.card`}
           >
-            <div
-              className={`font-display text-3xl font-bold ${item.color} mb-1`}
-            >
-              {item.value}
+            <div className="flex items-center justify-between mb-3">
+              <stat.icon className="h-6 w-6 opacity-80" />
+              <span className="text-white/60 text-xs">{stat.sub}</span>
             </div>
-            <div className="font-body text-xs text-gray-500">{item.label}</div>
+            <div className="font-display text-2xl font-bold">{stat.value}</div>
+            <div className="text-white/75 text-xs mt-1">{stat.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Totals row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Total Loan Amount Requested
-          </div>
-          <div className="font-display text-2xl font-bold text-navy-900">
-            ₹{stats.totalAmount.toLocaleString("en-IN")}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Approval Rate
-          </div>
-          <div className="font-display text-2xl font-bold text-green-700">
-            {approvalRate}%
-          </div>
-          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className="h-full bg-green-500 rounded-full transition-all duration-700"
-              style={{ width: `${approvalRate}%` }}
-            />
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Total Contact Enquiries
-          </div>
-          <div className="font-display text-2xl font-bold text-navy-900">
-            {submissions.length}
-          </div>
-        </div>
-      </div>
+      {/* Charts */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-base text-navy-900">
+              Monthly Loan Disbursement (₹Cr)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={CHART_DATA.monthlyDisbursal}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(v) => [`₹${v}L`, "Amount"]} />
+                <Bar dataKey="amount" fill="#c9a84c" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-      {/* Service Breakdown */}
-      {serviceBreakdown.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-6">
-          <h3 className="font-display text-base font-bold text-navy-900 mb-4">
-            Enquiries by Service
-          </h3>
-          <div className="space-y-3">
-            {serviceBreakdown.map(([service, count]) => {
-              const pct = Math.round((count / submissions.length) * 100);
-              return (
-                <div key={service}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-body text-sm text-gray-700">
-                      {service}
-                    </span>
-                    <span className="font-body text-xs font-semibold text-gray-500">
-                      {count} ({pct}%)
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-navy-700 to-gold-500 rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%` }}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-base text-navy-900">
+              Lead Conversion Rate
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={CHART_DATA.leadConversion}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}%`}
+                >
+                  {CHART_DATA.leadConversion.map((entry, i) => (
+                    <Cell
+                      key={entry.name}
+                      fill={PIE_COLORS[i % PIE_COLORS.length]}
                     />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-// ─── Loan Status Badge ────────────────────────────────────────────────────────
-
-interface LoanStatus {
-  status: "pending" | "approved" | "rejected";
-}
-
-function LoanStatusBadge({ status }: LoanStatus) {
-  if (status === "approved") {
-    return (
-      <span className="badge-approved">
-        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-        Approved
-      </span>
-    );
-  }
-  if (status === "rejected") {
-    return (
-      <span className="badge-rejected">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-        Rejected
-      </span>
-    );
-  }
-  return (
-    <span className="badge-pending">
-      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-      Pending
-    </span>
-  );
-}
-
-// ─── EMI Tracker Tab ─────────────────────────────────────────────────────────
-
-function EMITrackerTab({
-  loanApplications,
-  localLoanStatuses,
-}: {
-  loanApplications: LoanApplication[];
-  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
-}) {
-  const approvedLoans = loanApplications.filter((app) => {
-    const rawApp = app as unknown as Record<string, unknown>;
-    const id =
-      (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
-    const status =
-      localLoanStatuses[id] ??
-      ((rawApp.status as string) === "approved"
-        ? "approved"
-        : (rawApp.status as string) === "rejected"
-          ? "rejected"
-          : "pending");
-    return status === "approved";
-  });
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.5 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-600 flex items-center justify-center">
-            <CreditCard className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h2 className="font-display text-lg font-bold text-navy-900">
-              EMI Tracker
-            </h2>
-            <p className="font-body text-xs text-gray-500">
-              Track loan disbursements and EMI payments
-            </p>
-          </div>
-        </div>
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Approved Loans
-          </div>
-          <div className="font-display text-2xl font-bold text-navy-900">
-            {approvedLoans.length}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Total Disbursement Value
-          </div>
-          <div className="font-display text-2xl font-bold text-green-700">
-            ₹
-            {approvedLoans
-              .reduce((sum, a) => sum + (Number(a.loanAmount) || 0), 0)
-              .toLocaleString("en-IN")}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Pending Applications
-          </div>
-          <div className="font-display text-2xl font-bold text-amber-600">
-            {loanApplications.length - approvedLoans.length}
-          </div>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-base text-navy-900">
+            Branch Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={CHART_DATA.branchPerformance}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="khargone"
+                stroke="#c9a84c"
+                strokeWidth={2}
+                name="Khargone"
+              />
+              <Line
+                type="monotone"
+                dataKey="barwani"
+                stroke="#1a2e5a"
+                strokeWidth={2}
+                name="Barwani"
+              />
+              <Line
+                type="monotone"
+                dataKey="sendhwa"
+                stroke="#22c55e"
+                strokeWidth={2}
+                name="Sendhwa"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
-      {/* EMI Records Table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <h3 className="font-display text-base font-bold text-navy-900">
-            Approved Loan Records
-          </h3>
-          <p className="font-body text-xs text-gray-500 mt-0.5">
-            Disbursed loans with EMI details
-          </p>
-        </div>
-        {approvedLoans.length === 0 ? (
-          <div className="py-16 text-center" data-ocid="emi.empty_state">
-            <div className="h-14 w-14 rounded-full bg-purple-50 flex items-center justify-center mx-auto mb-4">
-              <CreditCard className="h-7 w-7 text-purple-300" />
-            </div>
-            <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
-              No approved loans yet
-            </h3>
-            <p className="font-body text-sm text-gray-500">
-              Approved loan EMI records will appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50/80">
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    #
-                  </TableHead>
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Customer Name
-                  </TableHead>
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Loan Amount
-                  </TableHead>
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Monthly EMI
-                  </TableHead>
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Tenure
-                  </TableHead>
-                  <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Status
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {approvedLoans.map((app, idx) => {
-                  const rawApp = app as unknown as Record<string, unknown>;
-                  const name =
-                    (rawApp.fullName as string) ||
-                    `${app.firstName} ${app.lastName}`.trim();
-                  const emi = (rawApp.monthlyEMI as string) || "—";
-                  const tenure =
-                    (rawApp.loanDuration as string) || app.tenure || "—";
-                  return (
-                    <TableRow
-                      key={`${app.firstName}-${String(app.timestamp)}`}
-                      className={`border-b border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-purple-50/20"}`}
-                      data-ocid={`emi.item.${idx + 1}`}
-                    >
-                      <TableCell className="font-body text-sm text-gray-400 font-mono">
-                        {idx + 1}
-                      </TableCell>
-                      <TableCell className="font-body text-sm font-medium text-navy-900">
-                        {name}
-                      </TableCell>
-                      <TableCell className="font-body text-sm font-semibold text-green-700">
-                        ₹{Number(app.loanAmount).toLocaleString("en-IN")}
-                      </TableCell>
-                      <TableCell className="font-body text-sm text-navy-900">
-                        {emi !== "—"
-                          ? `₹${Number(emi).toLocaleString("en-IN")}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="font-body text-sm text-gray-600">
-                        {tenure.toLowerCase().includes("month")
-                          ? tenure
-                          : `${tenure} months`}
-                      </TableCell>
-                      <TableCell>
-                        <span className="badge-approved">
-                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                          Disbursed
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Doc Verification Tab ─────────────────────────────────────────────────────
-
-function DocVerificationTab({
-  loanApplications,
-  localLoanStatuses,
-}: {
-  loanApplications: LoanApplication[];
-  localLoanStatuses: Record<string, "pending" | "approved" | "rejected">;
-}) {
-  const pendingApps = loanApplications.filter((app) => {
-    const rawApp = app as unknown as Record<string, unknown>;
-    const id =
-      (rawApp.id as string) ?? `${app.firstName}-${String(app.timestamp)}`;
-    const status =
-      localLoanStatuses[id] ??
-      ((rawApp.status as string) === "approved"
-        ? "approved"
-        : (rawApp.status as string) === "rejected"
-          ? "rejected"
-          : "pending");
-    return status === "pending";
-  });
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.5 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-xs px-6 py-5">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-orange-500 flex items-center justify-center">
-            <FileText className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h2 className="font-display text-lg font-bold text-navy-900">
-              Document Verification Queue
-            </h2>
-            <p className="font-body text-xs text-gray-500">
-              Verify customer documents and process loan files
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Pending Verification
-          </div>
-          <div className="font-display text-2xl font-bold text-amber-600">
-            {pendingApps.length}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Total Applications
-          </div>
-          <div className="font-display text-2xl font-bold text-navy-900">
-            {loanApplications.length}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5">
-          <div className="font-body text-xs text-gray-400 uppercase tracking-wider mb-2">
-            Processed
-          </div>
-          <div className="font-display text-2xl font-bold text-green-700">
-            {loanApplications.length - pendingApps.length}
-          </div>
-        </div>
-      </div>
-
-      {/* Pending verification list */}
-      <div className="space-y-4">
-        {pendingApps.length === 0 ? (
-          <div
-            className="bg-white rounded-xl border border-gray-100 shadow-xs py-16 text-center"
-            data-ocid="processing.empty_state"
-          >
-            <div className="h-14 w-14 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="h-7 w-7 text-orange-300" />
-            </div>
-            <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
-              All documents verified
-            </h3>
-            <p className="font-body text-sm text-gray-500">
-              No pending applications in the queue.
-            </p>
-          </div>
-        ) : (
-          pendingApps.map((app, idx) => {
-            const rawApp = app as unknown as Record<string, unknown>;
-            const name =
-              (rawApp.fullName as string) ||
-              `${app.firstName} ${app.lastName}`.trim();
-            const aadhaarCardFile = (rawApp.aadhaarCardFile as string) || "";
-            const panCardFile = (rawApp.panCardFile as string) || "";
-            const customerPhoto =
-              (rawApp.customerPhoto as string) ||
-              (rawApp.photoFile as string) ||
-              "";
-            const customerSignature =
-              (rawApp.customerSignature as string) ||
-              (rawApp.signatureFile as string) ||
-              "";
-            const docsPresent = [
-              aadhaarCardFile,
-              panCardFile,
-              customerPhoto,
-              customerSignature,
-            ].filter(Boolean).length;
-            return (
+      {/* Recent Activity */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-base text-navy-900">
+              Recent Applications
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {allApps.length === 0 ? (
               <div
-                key={`${app.firstName}-${String(app.timestamp)}`}
-                className="bg-white rounded-xl border border-gray-100 shadow-xs p-5"
-                data-ocid={`processing.item.${idx + 1}`}
+                className="text-center py-8 text-gray-400"
+                data-ocid="dashboard.recent_apps.empty_state"
               >
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                      <span className="font-body text-sm font-bold text-orange-600">
-                        {app.firstName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="font-body text-sm font-semibold text-navy-900">
-                        {name}
-                      </div>
-                      <div className="font-body text-xs text-gray-400">
-                        {app.loanType || "Personal Loan"} · ₹
-                        {Number(app.loanAmount).toLocaleString("en-IN")}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="badge-pending shrink-0">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Pending Verification
-                  </span>
-                </div>
-                {/* Document checklist */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: "Aadhaar Card", present: !!aadhaarCardFile },
-                    { label: "PAN Card", present: !!panCardFile },
-                    { label: "Customer Photo", present: !!customerPhoto },
-                    { label: "Signature", present: !!customerSignature },
-                  ].map((doc) => (
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No applications yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {allApps
+                  .slice(-5)
+                  .reverse()
+                  .map((app: any, i: number) => (
                     <div
-                      key={doc.label}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-body font-medium ${doc.present ? "bg-green-50 text-green-700 border border-green-200" : "bg-gray-50 text-gray-400 border border-gray-200"}`}
+                      key={app.id || String(i)}
+                      className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
+                      data-ocid={`dashboard.recent_apps.item.${i + 1}`}
                     >
-                      {doc.present ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <MinusCircle className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      {doc.label}
+                      <div>
+                        <div className="font-medium text-sm text-navy-900">
+                          {app.fullName || app.firstName || "Applicant"}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {app.loanType || "Loan"} &bull; ₹
+                          {Number(app.loanAmount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <StatusBadge status={app.status || "pending"} />
                     </div>
                   ))}
-                </div>
-                <div className="mt-3 font-body text-xs text-gray-500">
-                  Documents uploaded:{" "}
-                  <span className="font-semibold text-navy-900">
-                    {docsPresent}/4
-                  </span>
-                </div>
               </div>
-            );
-          })
-        )}
-      </div>
-    </motion.div>
-  );
-}
+            )}
+          </CardContent>
+        </Card>
 
-// ─── Main Dashboard ───────────────────────────────────────────────────────────
-
-// Session timeout constants — defined outside component to avoid lint dep warnings
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-const WARN_BEFORE_MS = 5 * 60 * 1000; // warn at 5 minutes remaining
-
-export function AdminDashboard() {
-  const { actor, isFetching: actorFetching } = useActor();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sessionValid, setSessionValid] = useState<boolean | null>(null);
-  const [sessionChecking, setSessionChecking] = useState(true);
-  // Default active tab depends on role — accounts/operations start on loans
-  const session0 = getSession();
-  const defaultTab =
-    session0?.role === "accounts" || session0?.role === "operations"
-      ? "loans"
-      : "enquiries";
-  const [activeTab, setActiveTab] = useState(defaultTab);
-
-  // Enquiries state
-  const [search, setSearch] = useState("");
-  const [serviceFilter, setServiceFilter] = useState("all");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-
-  // Loan apps state
-  const [loanSearch, setLoanSearch] = useState("");
-  const [loanSortOrder, setLoanSortOrder] = useState<"asc" | "desc">("desc");
-
-  // Loan action states
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [localLoanStatuses, setLocalLoanStatuses] = useState<
-    Record<string, "pending" | "approved" | "rejected">
-  >({});
-
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  // Session data
-  const session = getSession();
-  const sessionToken = session?.token ?? "";
-  const permissions = getPermissions(session?.role ?? "admin");
-
-  // Session timeout state (30 min inactivity, warn at 5 min remaining)
-  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
-  const [timeoutCountdown, setTimeoutCountdown] = useState(300); // seconds
-  const lastActivityRef = useRef<number>(Date.now());
-  const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
-
-  const clearAllTimers = useCallback(() => {
-    if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
-    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
-    if (countdownIntervalRef.current)
-      clearInterval(countdownIntervalRef.current);
-  }, []);
-
-  const doLogout = useCallback(() => {
-    localStorage.removeItem("adminSession");
-    localStorage.removeItem("jmd_admin_token");
-    window.location.href = "/admin/login";
-  }, []);
-
-  const extendSession = useCallback(() => {
-    lastActivityRef.current = Date.now();
-    setShowTimeoutWarning(false);
-    clearAllTimers();
-    if (countdownIntervalRef.current)
-      clearInterval(countdownIntervalRef.current);
-    // Restart timers
-    warnTimerRef.current = setTimeout(() => {
-      setShowTimeoutWarning(true);
-      setTimeoutCountdown(300);
-      countdownIntervalRef.current = setInterval(() => {
-        setTimeoutCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(countdownIntervalRef.current!);
-            doLogout();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }, SESSION_TIMEOUT_MS - WARN_BEFORE_MS);
-
-    timeoutTimerRef.current = setTimeout(() => {
-      doLogout();
-    }, SESSION_TIMEOUT_MS);
-  }, [clearAllTimers, doLogout]);
-
-  // Session timeout setup
-  useEffect(() => {
-    const handleActivity = () => {
-      if (showTimeoutWarning) return; // don't reset if warning is showing
-      lastActivityRef.current = Date.now();
-    };
-
-    window.addEventListener("mousemove", handleActivity);
-    window.addEventListener("click", handleActivity);
-    window.addEventListener("keypress", handleActivity);
-    window.addEventListener("touchstart", handleActivity);
-
-    // Initial timer
-    warnTimerRef.current = setTimeout(() => {
-      setShowTimeoutWarning(true);
-      setTimeoutCountdown(300);
-      countdownIntervalRef.current = setInterval(() => {
-        setTimeoutCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(countdownIntervalRef.current!);
-            doLogout();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }, SESSION_TIMEOUT_MS - WARN_BEFORE_MS);
-
-    timeoutTimerRef.current = setTimeout(() => {
-      doLogout();
-    }, SESSION_TIMEOUT_MS);
-
-    return () => {
-      window.removeEventListener("mousemove", handleActivity);
-      window.removeEventListener("click", handleActivity);
-      window.removeEventListener("keypress", handleActivity);
-      window.removeEventListener("touchstart", handleActivity);
-      clearAllTimers();
-    };
-  }, [clearAllTimers, doLogout, showTimeoutWarning]);
-
-  // Sync activeTab with permissions — redirect away from forbidden tabs
-  useEffect(() => {
-    if (activeTab === "settings" && !permissions.canViewSettings) {
-      setActiveTab("loans");
-    }
-    if (activeTab === "reports" && !permissions.canViewReports) {
-      setActiveTab("loans");
-    }
-    if (
-      activeTab === "enquiries" &&
-      session?.role !== "admin" &&
-      session?.role !== "bm" &&
-      session?.role !== "crm"
-    ) {
-      setActiveTab("loans");
-    }
-    if (activeTab === "emi" && session?.role !== "accounts") {
-      setActiveTab("loans");
-    }
-    if (activeTab === "processing" && session?.role !== "operations") {
-      setActiveTab("loans");
-    }
-  }, [
-    activeTab,
-    permissions.canViewSettings,
-    permissions.canViewReports,
-    session?.role,
-  ]);
-
-  // Live clock
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Check session validity on mount — local-only, no backend call
-  useEffect(() => {
-    const stored = localStorage.getItem("adminSession");
-    if (!stored) {
-      void navigate({ to: "/admin/login" });
-      setSessionChecking(false);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(stored) as SessionData;
-      if (!parsed.token || !parsed.role) {
-        localStorage.removeItem("adminSession");
-        localStorage.removeItem("jmd_admin_token");
-        void navigate({ to: "/admin/login" });
-      } else {
-        setSessionValid(true);
-      }
-    } catch {
-      localStorage.removeItem("adminSession");
-      localStorage.removeItem("jmd_admin_token");
-      void navigate({ to: "/admin/login" });
-    }
-    setSessionChecking(false);
-  }, [navigate]);
-
-  // Fetch contact submissions
-  const {
-    data: submissions = [],
-    isLoading: submissionsLoading,
-    refetch: refetchSubmissions,
-    isFetching: submissionsFetching,
-  } = useQuery<ContactFormSubmission[]>({
-    queryKey: ["admin-submissions"],
-    queryFn: async () => {
-      if (!actor || !sessionToken) return [];
-      return actor.getAllSubmissions(sessionToken);
-    },
-    enabled: !!actor && !actorFetching && sessionValid === true,
-    staleTime: 30_000,
-  });
-
-  // Fetch loan applications (backend + localStorage merged)
-  const {
-    data: loanApplications = [],
-    isLoading: loansLoading,
-    refetch: refetchLoans,
-    isFetching: loansFetching,
-  } = useQuery<LoanApplication[]>({
-    queryKey: ["admin-loan-applications"],
-    queryFn: async () => {
-      // Always load from localStorage first
-      const localApps: LoanApplication[] = (() => {
-        try {
-          const raw = localStorage.getItem("jmd_loan_applications");
-          if (!raw) return [];
-          const parsed = JSON.parse(raw) as Record<string, unknown>[];
-          return parsed.map(
-            (app) =>
-              ({
-                firstName:
-                  (app.firstName as string) ||
-                  (app.fullName as string)?.split(" ")[0] ||
-                  "",
-                lastName:
-                  (app.lastName as string) ||
-                  (app.fullName as string)?.split(" ").slice(1).join(" ") ||
-                  "",
-                dateOfBirth: (app.dateOfBirth as string) || "",
-                motherName: (app.motherName as string) || "",
-                fatherName:
-                  (app.fatherName as string) ||
-                  (app.fatherHusbandName as string) ||
-                  "",
-                aadharNumber:
-                  (app.aadharNumber as string) ||
-                  (app.aadhaarNumber as string) ||
-                  "",
-                panNumber: (app.panNumber as string) || "",
-                loanPurpose:
-                  (app.loanPurpose as string) ||
-                  `Occupation: ${app.occupation || ""}`,
-                loanType: (app.loanType as string) || "Personal Loan",
-                tenure:
-                  (app.tenure as string) || (app.loanDuration as string) || "",
-                loanAmount: (app.loanAmount as string) || "",
-                monthlyIncome: (app.monthlyIncome as string) || "",
-                employeeType:
-                  (app.employeeType as string) ||
-                  (app.occupation as string) ||
-                  "",
-                aadharCardFile:
-                  (app.aadharCardFile as string) ||
-                  (app.aadhaarCardFile as string) ||
-                  "",
-                panCardFile: (app.panCardFile as string) || "",
-                photoFile:
-                  (app.photoFile as string) ||
-                  (app.customerPhoto as string) ||
-                  "",
-                signatureFile:
-                  (app.signatureFile as string) ||
-                  (app.customerSignature as string) ||
-                  "",
-                timestamp: (() => {
-                  const ts = app.timestamp;
-                  if (typeof ts === "bigint") return ts;
-                  if (typeof ts === "number" && ts > 0) {
-                    // Date.now() returns milliseconds — convert to nanoseconds
-                    return BigInt(Math.floor(ts)) * BigInt(1_000_000);
-                  }
-                  return BigInt(Date.now()) * BigInt(1_000_000);
-                })(),
-                // Extra fields preserved
-                ...(app as object),
-              }) as unknown as LoanApplication,
-          );
-        } catch {
-          return [];
-        }
-      })();
-
-      // Also try backend
-      let backendApps: LoanApplication[] = [];
-      if (actor && sessionToken) {
-        try {
-          backendApps = await actor.getAllLoanApplications(sessionToken);
-        } catch {
-          // backend failed, use localStorage only
-        }
-      }
-
-      // Merge: prefer backend data (has documents), fill in extra fields from localStorage
-      // Backend apps have documents (base64 files), localStorage apps have extra metadata (mobile, address, etc.)
-      const seen = new Set<string>();
-      const merged: LoanApplication[] = [];
-
-      // Build a map of localStorage apps by their ID for quick lookup
-      const localAppMap = new Map<string, Record<string, unknown>>();
-      for (const app of localApps) {
-        const rawApp = app as unknown as Record<string, unknown>;
-        const key = (rawApp.id as string) || String(app.timestamp) || "";
-        if (key) localAppMap.set(key, rawApp);
-      }
-
-      // Backend apps take priority (they have documents now)
-      for (const backendApp of backendApps) {
-        const rawBackend = backendApp as unknown as Record<string, unknown>;
-        // Backend timestamp is nanoseconds BigInt -- convert to ms-based ID
-        const tsNs = backendApp.timestamp;
-        const tsMs =
-          typeof tsNs === "bigint"
-            ? Number(tsNs / BigInt(1_000_000))
-            : typeof tsNs === "number"
-              ? tsNs
-              : 0;
-        // Try to find matching local app (same firstName + approximate timestamp)
-        let matchedLocalKey: string | null = null;
-        for (const [key, localRaw] of localAppMap.entries()) {
-          const localFirstName =
-            (localRaw.firstName as string) ||
-            (localRaw.fullName as string)?.split(" ")[0] ||
-            "";
-          const backendFirstName = backendApp.firstName;
-          const localTs =
-            typeof localRaw.timestamp === "number" ? localRaw.timestamp : 0;
-          // Match if same firstName and timestamps within 10 seconds
-          if (
-            localFirstName === backendFirstName &&
-            Math.abs(localTs - tsMs) < 10_000
-          ) {
-            matchedLocalKey = key;
-            break;
-          }
-        }
-        // Merge extra fields from localStorage into backend app
-        const localExtra = matchedLocalKey
-          ? localAppMap.get(matchedLocalKey)
-          : null;
-        const mergedApp = localExtra
-          ? ({
-              ...localExtra,
-              ...rawBackend,
-              // Keep backend's document fields (they have the actual base64 data)
-              aadharCardFile:
-                (rawBackend.aadharCardFile as string) ||
-                (localExtra.aadharCardFile as string) ||
-                "",
-              panCardFile:
-                (rawBackend.panCardFile as string) ||
-                (localExtra.panCardFile as string) ||
-                "",
-              photoFile:
-                (rawBackend.photoFile as string) ||
-                (localExtra.photoFile as string) ||
-                "",
-              signatureFile:
-                (rawBackend.signatureFile as string) ||
-                (localExtra.signatureFile as string) ||
-                "",
-              // Also keep extra localStorage-only fields
-              mobile1: (localExtra.mobile1 as string) || "",
-              mobile2: (localExtra.mobile2 as string) || "",
-              currentAddress: (localExtra.currentAddress as string) || "",
-              aadhaarNumber:
-                (localExtra.aadhaarNumber as string) ||
-                backendApp.aadharNumber ||
-                "",
-              fullName:
-                (localExtra.fullName as string) ||
-                `${backendApp.firstName} ${backendApp.lastName}`.trim(),
-              fatherHusbandName:
-                (localExtra.fatherHusbandName as string) ||
-                backendApp.fatherName ||
-                "",
-              loanDuration:
-                (localExtra.loanDuration as string) || backendApp.tenure || "",
-              occupation:
-                (localExtra.occupation as string) ||
-                backendApp.employeeType ||
-                "",
-              interestRate: (localExtra.interestRate as string) || "",
-              monthlyEMI: (localExtra.monthlyEMI as string) || "",
-              id:
-                (localExtra.id as string) ||
-                (rawBackend.id as string) ||
-                String(tsMs),
-            } as unknown as LoanApplication)
-          : backendApp;
-
-        const key =
-          ((mergedApp as unknown as Record<string, unknown>).id as string) ||
-          String(backendApp.timestamp);
-        if (key && !seen.has(key)) {
-          seen.add(key);
-          merged.push(mergedApp);
-        }
-        if (matchedLocalKey) localAppMap.delete(matchedLocalKey); // Remove matched so it's not duplicated below
-      }
-
-      // Add any remaining localStorage-only apps (not in backend yet)
-      for (const app of localApps) {
-        const rawApp = app as unknown as Record<string, unknown>;
-        const key = (rawApp.id as string) || String(app.timestamp) || "";
-        if (!key || seen.has(key)) continue;
-        // Check if this key was already consumed via matchedLocalKey
-        if (!localAppMap.has(key)) continue;
-        seen.add(key);
-        merged.push(app);
-      }
-
-      // Sort by timestamp descending (safe BigInt comparison)
-      return merged.sort((a, b) => {
-        const ta =
-          typeof a.timestamp === "bigint"
-            ? a.timestamp
-            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
-        const tb =
-          typeof b.timestamp === "bigint"
-            ? b.timestamp
-            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
-        if (tb > ta) return 1;
-        if (tb < ta) return -1;
-        return 0;
-      });
-    },
-    enabled: sessionValid === true,
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  });
-
-  const isFetching = submissionsFetching || loansFetching;
-
-  const handleRefresh = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: ["admin-loan-applications"],
-    });
-    void queryClient.invalidateQueries({ queryKey: ["admin-submissions"] });
-    void refetchSubmissions();
-    void refetchLoans();
-  }, [refetchSubmissions, refetchLoans, queryClient]);
-
-  // Enquiries — derived stats & filtered
-  const enquiryStats = useMemo(() => {
-    const total = submissions.length;
-    const today = submissions.filter((s) => isToday(s.timestamp)).length;
-    const serviceCounts: Record<string, number> = {};
-    for (const s of submissions) {
-      serviceCounts[s.serviceInterest] =
-        (serviceCounts[s.serviceInterest] || 0) + 1;
-    }
-    const topService =
-      Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
-    return { total, today, topService };
-  }, [submissions]);
-
-  const allServices = useMemo(() => {
-    const set = new Set(submissions.map((s) => s.serviceInterest));
-    return Array.from(set).sort();
-  }, [submissions]);
-
-  const filteredSubmissions = useMemo(() => {
-    const q = search.toLowerCase();
-    return submissions
-      .filter((s) => {
-        const matchSearch =
-          !q ||
-          s.name.toLowerCase().includes(q) ||
-          s.email.toLowerCase().includes(q) ||
-          s.phone.includes(q) ||
-          s.serviceInterest.toLowerCase().includes(q);
-        const matchService =
-          serviceFilter === "all" || s.serviceInterest === serviceFilter;
-        return matchSearch && matchService;
-      })
-      .sort((a, b) => {
-        const ta =
-          typeof a.timestamp === "bigint"
-            ? a.timestamp
-            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
-        const tb =
-          typeof b.timestamp === "bigint"
-            ? b.timestamp
-            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
-        const cmp = ta > tb ? 1 : ta < tb ? -1 : 0;
-        return sortOrder === "desc" ? -cmp : cmp;
-      });
-  }, [submissions, search, serviceFilter, sortOrder]);
-
-  // Loan apps — derived stats & filtered
-  const loanStats = useMemo(() => {
-    const total = loanApplications.length;
-    const today = loanApplications.filter((a) => isToday(a.timestamp)).length;
-    return { total, today };
-  }, [loanApplications]);
-
-  const filteredLoans = useMemo(() => {
-    const q = loanSearch.toLowerCase();
-    return loanApplications
-      .filter((a) => {
-        if (!q) return true;
-        return (
-          a.firstName.toLowerCase().includes(q) ||
-          a.lastName.toLowerCase().includes(q) ||
-          a.aadharNumber.includes(q) ||
-          a.panNumber.toLowerCase().includes(q) ||
-          a.loanPurpose.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const ta =
-          typeof a.timestamp === "bigint"
-            ? a.timestamp
-            : BigInt(String(a.timestamp).replace(/n$/, "") || "0");
-        const tb =
-          typeof b.timestamp === "bigint"
-            ? b.timestamp
-            : BigInt(String(b.timestamp).replace(/n$/, "") || "0");
-        const cmp = ta > tb ? 1 : ta < tb ? -1 : 0;
-        return loanSortOrder === "desc" ? -cmp : cmp;
-      });
-  }, [loanApplications, loanSearch, loanSortOrder]);
-
-  const handleLogout = useCallback(async () => {
-    if (actor && sessionToken) {
-      try {
-        await actor.adminLogout(sessionToken);
-      } catch {
-        // Ignore errors on logout
-      }
-    }
-    localStorage.removeItem("adminSession");
-    localStorage.removeItem("jmd_admin_token");
-    window.location.href = "/";
-  }, [actor, sessionToken]);
-
-  // ─── Approve / Reject Loan ───────────────────────────────────────────────────
-
-  const handleApproveLoan = useCallback(
-    async (app: LoanApplication & { id?: string }) => {
-      const id =
-        ((app as unknown as Record<string, unknown>).id as string) ??
-        `${app.firstName}-${String(app.timestamp)}`;
-      setActionLoading(id);
-      try {
-        const actorAny = actor as unknown as Record<
-          string,
-          ((...args: unknown[]) => Promise<unknown>) | undefined
-        >;
-        await actorAny.approveLoan?.(id, sessionToken);
-        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "approved" }));
-        // Store full app data for sanction letter
-        localStorage.setItem(
-          `jmd_approved_loan_${id}`,
-          JSON.stringify({
-            ...app,
-            id,
-            status: "approved",
-            sanctionDate: new Date().toISOString(),
-            fullName: `${app.firstName} ${app.lastName}`.trim(),
-            fatherHusbandName: app.fatherName,
-            mobile1: "",
-            aadhaarNumber: app.aadharNumber,
-            loanDuration: app.tenure,
-          }),
-        );
-        await queryClient.invalidateQueries({
-          queryKey: ["admin-loan-applications"],
-        });
-        toast.success("Loan application approved!", {
-          description: `Sanction letter is now available for ${app.firstName} ${app.lastName}`,
-        });
-      } catch {
-        // Backend may not have approveLoan yet — store locally
-        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "approved" }));
-        localStorage.setItem(
-          `jmd_approved_loan_${id}`,
-          JSON.stringify({
-            ...app,
-            id,
-            status: "approved",
-            sanctionDate: new Date().toISOString(),
-            fullName: `${app.firstName} ${app.lastName}`.trim(),
-            fatherHusbandName: app.fatherName,
-            mobile1: "",
-            aadhaarNumber: app.aadharNumber,
-            loanDuration: app.tenure,
-          }),
-        );
-        toast.success("Loan approved (locally)!", {
-          description: "Sanction letter is now available.",
-        });
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [actor, sessionToken, queryClient],
-  );
-
-  const handleRejectLoan = useCallback(
-    async (app: LoanApplication & { id?: string }) => {
-      const id =
-        ((app as unknown as Record<string, unknown>).id as string) ??
-        `${app.firstName}-${String(app.timestamp)}`;
-      setActionLoading(id);
-      try {
-        const actorAny2 = actor as unknown as Record<
-          string,
-          ((...args: unknown[]) => Promise<unknown>) | undefined
-        >;
-        await actorAny2.rejectLoan?.(id, sessionToken);
-        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "rejected" }));
-        await queryClient.invalidateQueries({
-          queryKey: ["admin-loan-applications"],
-        });
-        toast.success("Loan application rejected.");
-      } catch {
-        setLocalLoanStatuses((prev) => ({ ...prev, [id]: "rejected" }));
-        toast.success("Loan rejected (locally).");
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [actor, sessionToken, queryClient],
-  );
-
-  const formattedDate = currentTime.toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-  const formattedTime = currentTime.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  // Loading state while checking session
-  if (sessionChecking || actorFetching) {
-    return (
-      <div className="min-h-screen bg-navy-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-12 w-12 rounded-full border-4 border-gold-500 border-t-transparent animate-spin mx-auto mb-4" />
-          <p className="font-body text-sm text-gray-500">Verifying access...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <Toaster position="top-right" richColors />
-      {/* ─── Sidebar ─── */}
-      <AnimatePresence>
-        {(sidebarOpen || true) && (
-          <motion.aside
-            initial={false}
-            className={`
-              fixed inset-y-0 left-0 z-40 w-64 bg-navy-900 flex flex-col
-              transform transition-transform duration-300 ease-in-out
-              ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-              lg:translate-x-0 lg:static lg:block
-            `}
-          >
-            {/* Sidebar header */}
-            <div className="p-5 border-b border-white/10">
-              <img
-                src={getActiveLogo()}
-                alt="JMD FinCap"
-                className="h-12 w-auto object-contain mb-4"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-              {/* Role Info Banner */}
-              <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-2">
-                <div className="flex items-center gap-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-base text-navy-900">
+              Pending Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                {
+                  task: "Verify KYC documents for 5 customers",
+                  priority: "High",
+                },
+                { task: "Follow up with 12 pending leads", priority: "Medium" },
+                { task: "Process 3 loan disbursals", priority: "High" },
+                { task: "Generate monthly report", priority: "Low" },
+              ].map((t, i) => (
+                <div
+                  key={t.task}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-50"
+                  data-ocid={`dashboard.tasks.item.${i + 1}`}
+                >
                   <div
-                    className={`h-8 w-8 rounded-full border flex items-center justify-center shrink-0 ${
-                      session?.role === "bm"
-                        ? "bg-blue-500/20 border-blue-500/40"
-                        : session?.role === "crm"
-                          ? "bg-green-500/20 border-green-500/40"
-                          : session?.role === "accounts"
-                            ? "bg-purple-500/20 border-purple-500/40"
-                            : session?.role === "operations"
-                              ? "bg-orange-500/20 border-orange-500/40"
-                              : "bg-gold-500/20 border-gold-500/40"
+                    className={`h-2 w-2 rounded-full shrink-0 ${
+                      t.priority === "High"
+                        ? "bg-red-500"
+                        : t.priority === "Medium"
+                          ? "bg-yellow-500"
+                          : "bg-green-500"
+                    }`}
+                  />
+                  <div className="flex-1 text-sm text-navy-800">{t.task}</div>
+                  <Badge
+                    className={`text-xs border-0 ${
+                      t.priority === "High"
+                        ? "bg-red-100 text-red-700"
+                        : t.priority === "Medium"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-green-100 text-green-700"
                     }`}
                   >
-                    <RoleIcon role={session?.role ?? "admin"} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-body text-[10px] text-white/40 uppercase tracking-wider">
-                      Logged in as
-                    </div>
-                    <div
-                      className={`font-body text-xs font-semibold truncate ${
-                        session?.role === "bm"
-                          ? "text-blue-400"
-                          : session?.role === "crm"
-                            ? "text-green-400"
-                            : session?.role === "accounts"
-                              ? "text-purple-400"
-                              : session?.role === "operations"
-                                ? "text-orange-400"
-                                : "text-gold-400"
-                      }`}
-                    >
-                      {ROLE_LABELS[session?.role ?? "admin"] ??
-                        "Admin — Full Control"}
-                    </div>
-                  </div>
+                    {t.priority}
+                  </Badge>
                 </div>
-                {/* Permission bullets */}
-                <div className="space-y-1 pt-1 border-t border-white/5">
-                  {(ROLE_DESCRIPTIONS[session?.role ?? "admin"] ?? []).map(
-                    (desc) => (
-                      <div key={desc} className="flex items-start gap-1.5">
-                        <span className="mt-1 h-1 w-1 rounded-full bg-gold-500/60 shrink-0" />
-                        <span className="font-body text-[10px] text-white/50 leading-tight">
-                          {desc}
-                        </span>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </div>
+              ))}
             </div>
-
-            {/* Nav items */}
-            <nav className="flex-1 p-4" aria-label="Admin navigation">
-              <div className="space-y-1">
-                {/* Contact Enquiries — admin, bm, crm only */}
-                {(session?.role === "admin" ||
-                  session?.role === "bm" ||
-                  session?.role === "crm") && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("enquiries")}
-                    data-ocid="nav.enquiries.tab"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                      activeTab === "enquiries"
-                        ? "admin-sidebar-active"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    Contact Enquiries
-                  </button>
-                )}
-                {/* Loan Applications — all roles */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("loans")}
-                  data-ocid="nav.loans.tab"
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                    activeTab === "loans"
-                      ? "admin-sidebar-active"
-                      : "text-white/60 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <Wallet className="h-4 w-4 shrink-0" />
-                  Loan Applications
-                  {loanStats.total > 0 && (
-                    <span className="ml-auto bg-gold-500 text-navy-900 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                      {loanStats.total > 99 ? "99+" : loanStats.total}
-                    </span>
-                  )}
-                </button>
-                {/* EMI Tracker — accounts only */}
-                {session?.role === "accounts" && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("emi")}
-                    data-ocid="nav.emi.tab"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                      activeTab === "emi"
-                        ? "admin-sidebar-active"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <CreditCard className="h-4 w-4 shrink-0" />
-                    EMI Tracker
-                  </button>
-                )}
-                {/* Processing Status — operations only */}
-                {session?.role === "operations" && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("processing")}
-                    data-ocid="nav.processing.tab"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                      activeTab === "processing"
-                        ? "admin-sidebar-active"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <FileText className="h-4 w-4 shrink-0" />
-                    Doc Verification
-                  </button>
-                )}
-                {/* Reports — admin, bm, accounts */}
-                {permissions.canViewReports && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("reports")}
-                    data-ocid="nav.reports.tab"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                      activeTab === "reports"
-                        ? "admin-sidebar-active"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <BarChart2 className="h-4 w-4 shrink-0" />
-                    Reports
-                  </button>
-                )}
-                {/* Settings — admin only */}
-                {permissions.canViewSettings && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("settings")}
-                    data-ocid="nav.settings.tab"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm font-medium transition-all duration-200 ${
-                      activeTab === "settings"
-                        ? "admin-sidebar-active"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <Settings className="h-4 w-4 shrink-0" />
-                    Settings
-                  </button>
-                )}
-              </div>
-            </nav>
-
-            {/* Sidebar footer */}
-            <div className="p-4 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-body text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-500"
-              >
-                <LogOut className="h-4 w-4 shrink-0" />
-                Logout
-              </button>
-              <a
-                href="/"
-                className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-white/30 hover:text-white/60 font-body text-xs transition-colors duration-200"
-              >
-                ← Back to Website
-              </a>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: overlay is aria-hidden, keyboard users use the Close button
-        <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* ─── Main Content ─── */}
-      <div className="flex-1 min-w-0 flex flex-col">
-        {/* Header bar */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between gap-4 sticky top-0 z-20">
-          <div className="flex items-center gap-4">
-            {/* Mobile menu toggle */}
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-navy-900 hover:bg-gray-100 transition-colors"
-              aria-label={sidebarOpen ? "Close menu" : "Open menu"}
-            >
-              {sidebarOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </button>
-
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-display text-xl font-bold text-navy-900">
-                  {session?.role === "bm"
-                    ? "Branch Manager Dashboard"
-                    : session?.role === "crm"
-                      ? "CRM Dashboard"
-                      : session?.role === "accounts"
-                        ? "Accounts Dashboard"
-                        : session?.role === "operations"
-                          ? "Operations Dashboard"
-                          : "Admin Dashboard"}
-                </h1>
-                {session?.role && (
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-body font-semibold border ${
-                      session.role === "bm"
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                        : session.role === "crm"
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : session.role === "accounts"
-                            ? "bg-purple-50 text-purple-700 border-purple-200"
-                            : session.role === "operations"
-                              ? "bg-orange-50 text-orange-700 border-orange-200"
-                              : "bg-gold-100 text-gold-700 border-gold-200"
-                    }`}
-                  >
-                    <RoleIcon role={session.role} />
-                    {ROLE_DISPLAY_LABELS[session.role] ?? session.role}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Clock className="h-3 w-3 text-gray-400" />
-                <span className="font-body text-xs text-gray-400">
-                  {formattedDate} &nbsp;·&nbsp; {formattedTime}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isFetching}
-              className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 hover:border-navy-900"
-            >
-              <RefreshCw
-                className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (activeTab === "enquiries") {
-                  exportEnquiriesToCSV(submissions);
-                } else {
-                  exportLoanApplicationsToCSV(loanApplications);
-                }
-              }}
-              disabled={
-                activeTab === "enquiries"
-                  ? submissions.length === 0
-                  : loanApplications.length === 0
-              }
-              className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 hover:border-navy-900"
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Export CSV
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void handleLogout()}
-              className="font-body text-xs bg-navy-900 hover:bg-navy-700 text-white hidden sm:flex"
-            >
-              <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              Logout
-            </Button>
-          </div>
-        </header>
-
-        {/* Page content */}
-        <main className="flex-1 p-6 overflow-auto">
-          {/* ─── Stats Cards ─── */}
-          <section
-            className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-8"
-            aria-label="Summary stats"
-          >
-            {(session?.role === "admin" ||
-              session?.role === "bm" ||
-              session?.role === "crm") && (
-              <StatCard
-                icon={Users}
-                label="Contact Enquiries"
-                value={enquiryStats.total}
-                animate
-                numericValue={enquiryStats.total}
-                delay={0.1}
-              />
-            )}
-            {(session?.role === "admin" ||
-              session?.role === "bm" ||
-              session?.role === "crm") && (
-              <StatCard
-                icon={Calendar}
-                label="Enquiries Today"
-                value={enquiryStats.today}
-                animate
-                numericValue={enquiryStats.today}
-                delay={0.15}
-              />
-            )}
-            <StatCard
-              icon={CreditCard}
-              label="Loan Applications"
-              value={loanStats.total}
-              animate
-              numericValue={loanStats.total}
-              delay={0.2}
-              accent
-            />
-            <StatCard
-              icon={TrendingUp}
-              label={
-                session?.role === "accounts"
-                  ? "EMI Records"
-                  : session?.role === "operations"
-                    ? "Pending Verification"
-                    : "Top Service"
-              }
-              value={
-                session?.role === "accounts"
-                  ? loanStats.total
-                  : session?.role === "operations"
-                    ? loanStats.total
-                    : enquiryStats.topService
-              }
-              delay={0.25}
-            />
-          </section>
-
-          {/* ─── Tabs ─── */}
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="space-y-6"
-          >
-            <TabsList className="bg-white border border-gray-200 p-1 rounded-xl h-auto flex-wrap">
-              {/* Contact Enquiries — admin, bm, crm only */}
-              {(session?.role === "admin" ||
-                session?.role === "bm" ||
-                session?.role === "crm") && (
-                <TabsTrigger
-                  value="enquiries"
-                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                  data-ocid="dashboard.enquiries.tab"
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Contact Enquiries
-                  <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
-                    {submissions.length}
-                  </span>
-                </TabsTrigger>
-              )}
-              {/* Loan Applications — all roles */}
-              <TabsTrigger
-                value="loans"
-                className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                data-ocid="dashboard.loans.tab"
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Loan Applications
-                <span className="ml-2 bg-gray-100 text-gray-600 data-[state=active]:bg-white/20 data-[state=active]:text-white text-xs font-bold rounded-full px-2 py-0.5">
-                  {loanApplications.length}
-                </span>
-              </TabsTrigger>
-              {/* EMI Tracker — accounts */}
-              {session?.role === "accounts" && (
-                <TabsTrigger
-                  value="emi"
-                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                  data-ocid="dashboard.emi.tab"
-                >
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  EMI Tracker
-                </TabsTrigger>
-              )}
-              {/* Doc Verification — operations */}
-              {session?.role === "operations" && (
-                <TabsTrigger
-                  value="processing"
-                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                  data-ocid="dashboard.processing.tab"
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Doc Verification
-                </TabsTrigger>
-              )}
-              {/* Reports — admin, bm, accounts */}
-              {permissions.canViewReports && (
-                <TabsTrigger
-                  value="reports"
-                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                  data-ocid="dashboard.reports.tab"
-                >
-                  <BarChart2 className="mr-2 h-4 w-4" />
-                  Reports
-                </TabsTrigger>
-              )}
-              {/* Settings — admin only */}
-              {permissions.canViewSettings && (
-                <TabsTrigger
-                  value="settings"
-                  className="font-body text-sm rounded-lg data-[state=active]:bg-navy-900 data-[state=active]:text-white px-5 py-2"
-                  data-ocid="dashboard.settings.tab"
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            {/* ── Contact Enquiries Tab ── */}
-            <TabsContent value="enquiries" className="space-y-0">
-              <motion.section
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.5 }}
-                className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden"
-                aria-label="Enquiries table"
-              >
-                {/* Table toolbar */}
-                <div className="px-6 py-5 border-b border-gray-100">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div>
-                      <h2 className="font-display text-lg font-bold text-navy-900">
-                        All Enquiries
-                      </h2>
-                      <p className="font-body text-xs text-gray-500 mt-0.5">
-                        {filteredSubmissions.length} of {submissions.length}{" "}
-                        submissions
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        <Input
-                          placeholder="Search by name, email, phone..."
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                          className="pl-9 font-body text-sm border-gray-200 w-full sm:w-64 focus:border-gold-500"
-                        />
-                      </div>
-
-                      <Select
-                        value={serviceFilter}
-                        onValueChange={setServiceFilter}
-                      >
-                        <SelectTrigger className="font-body text-sm border-gray-200 w-full sm:w-44 focus:ring-gold-500">
-                          <SelectValue placeholder="Filter by service" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all" className="font-body">
-                            All Services
-                          </SelectItem>
-                          {allServices.map((s) => (
-                            <SelectItem key={s} value={s} className="font-body">
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setSortOrder((p) => (p === "desc" ? "asc" : "desc"))
-                        }
-                        className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 shrink-0"
-                      >
-                        {sortOrder === "desc" ? (
-                          <>
-                            <ChevronDown className="mr-1 h-3.5 w-3.5" /> Newest
-                          </>
-                        ) : (
-                          <>
-                            <ChevronUp className="mr-1 h-3.5 w-3.5" /> Oldest
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Table body */}
-                <div className="overflow-x-auto">
-                  {submissionsLoading ? (
-                    <div className="p-6">
-                      <TableSkeleton />
-                    </div>
-                  ) : filteredSubmissions.length === 0 ? (
-                    <div className="py-20 text-center">
-                      <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                        <Inbox className="h-7 w-7 text-gray-400" />
-                      </div>
-                      <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
-                        No enquiries found
-                      </h3>
-                      <p className="font-body text-sm text-gray-500">
-                        {search || serviceFilter !== "all"
-                          ? "Try adjusting your search or filter."
-                          : "Enquiries will appear here once customers submit the contact form."}
-                      </p>
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">
-                            #
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Name
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Phone
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Email
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Service
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Message
-                          </TableHead>
-                          <TableHead className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Date & Time
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredSubmissions.map((sub, idx) => (
-                          <TableRow
-                            key={`${sub.name}-${String(sub.timestamp)}`}
-                            className={`hover:bg-gold-100/30 transition-colors duration-150 border-b border-gray-50 ${
-                              idx % 2 === 0 ? "bg-white" : "bg-navy-50/20"
-                            }`}
-                          >
-                            <TableCell className="font-body text-sm text-gray-400 font-mono">
-                              {idx + 1}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2.5">
-                                <div className="h-8 w-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
-                                  <span className="font-body text-xs font-bold text-gold-500">
-                                    {sub.name.charAt(0).toUpperCase()}
-                                  </span>
-                                </div>
-                                <span className="font-body text-sm font-medium text-navy-900">
-                                  {sub.name}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <a
-                                href={`tel:${sub.phone}`}
-                                className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors font-mono"
-                              >
-                                {sub.phone}
-                              </a>
-                            </TableCell>
-                            <TableCell>
-                              <a
-                                href={`mailto:${sub.email}`}
-                                className="font-body text-sm text-gray-700 hover:text-gold-600 transition-colors truncate block max-w-[180px]"
-                              >
-                                {sub.email}
-                              </a>
-                            </TableCell>
-                            <TableCell>
-                              <ServiceBadge service={sub.serviceInterest} />
-                            </TableCell>
-                            <TableCell>
-                              <MessageCell message={sub.message || "—"} />
-                            </TableCell>
-                            <TableCell>
-                              <div className="font-body text-xs text-gray-500 whitespace-nowrap">
-                                {formatTimestamp(sub.timestamp)}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-
-                {/* Table footer */}
-                {!submissionsLoading && filteredSubmissions.length > 0 && (
-                  <div className="px-6 py-3 border-t border-gray-50 bg-gray-50/50 flex items-center justify-between">
-                    <p className="font-body text-xs text-gray-500">
-                      Showing{" "}
-                      <span className="font-semibold text-navy-900">
-                        {filteredSubmissions.length}
-                      </span>{" "}
-                      enquiries
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => exportEnquiriesToCSV(filteredSubmissions)}
-                      className="font-body text-xs text-gray-500 hover:text-navy-900"
-                    >
-                      <Download className="mr-1 h-3 w-3" />
-                      Export filtered
-                    </Button>
-                  </div>
-                )}
-              </motion.section>
-            </TabsContent>
-
-            {/* ── Loan Applications Tab ── */}
-            <TabsContent value="loans" className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.5 }}
-              >
-                {/* Toolbar */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-xs p-5 mb-5">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div>
-                      <h2 className="font-display text-lg font-bold text-navy-900">
-                        Loan Applications
-                      </h2>
-                      <p className="font-body text-xs text-gray-500 mt-0.5">
-                        {filteredLoans.length} of {loanApplications.length}{" "}
-                        applications
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        <Input
-                          placeholder="Search by name or Aadhar..."
-                          value={loanSearch}
-                          onChange={(e) => setLoanSearch(e.target.value)}
-                          className="pl-9 font-body text-sm border-gray-200 w-full sm:w-64 focus:border-gold-500"
-                        />
-                      </div>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setLoanSortOrder((p) =>
-                            p === "desc" ? "asc" : "desc",
-                          )
-                        }
-                        className="font-body text-xs border-gray-200 text-gray-600 hover:text-navy-900 shrink-0"
-                      >
-                        {loanSortOrder === "desc" ? (
-                          <>
-                            <ChevronDown className="mr-1 h-3.5 w-3.5" /> Newest
-                          </>
-                        ) : (
-                          <>
-                            <ChevronUp className="mr-1 h-3.5 w-3.5" /> Oldest
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cards */}
-                {loansLoading ? (
-                  <CardSkeleton />
-                ) : filteredLoans.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-xs py-20 text-center">
-                    <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                      <CreditCard className="h-7 w-7 text-gray-400" />
-                    </div>
-                    <h3 className="font-display text-lg font-semibold text-gray-700 mb-1">
-                      No loan applications
-                    </h3>
-                    <p className="font-body text-sm text-gray-500">
-                      {loanSearch
-                        ? "Try adjusting your search."
-                        : "Loan applications will appear here once customers apply."}
-                    </p>
-                    <a
-                      href="/apply"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-lg bg-gold-500 text-navy-900 font-body text-sm font-semibold hover:bg-gold-400 transition-colors"
-                    >
-                      View Application Form
-                    </a>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {filteredLoans.map((app, idx) => {
-                      const id =
-                        ((app as unknown as Record<string, unknown>)
-                          .id as string) ??
-                        `${app.firstName}-${String(app.timestamp)}`;
-                      return (
-                        <LoanApplicationCard
-                          key={`${app.firstName}-${String(app.timestamp)}`}
-                          app={app}
-                          idx={idx}
-                          onApprove={handleApproveLoan}
-                          onReject={handleRejectLoan}
-                          actionLoading={actionLoading}
-                          localStatus={localLoanStatuses[id]}
-                          permissions={permissions}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-
-                {!loansLoading && filteredLoans.length > 0 && (
-                  <div className="pt-2 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => exportLoanApplicationsToCSV(filteredLoans)}
-                      className="font-body text-xs text-gray-500 hover:text-navy-900"
-                    >
-                      <Download className="mr-1 h-3 w-3" />
-                      Export filtered to CSV
-                    </Button>
-                  </div>
-                )}
-              </motion.div>
-            </TabsContent>
-            {/* ── Reports Tab ── */}
-            {permissions.canViewReports && (
-              <TabsContent value="reports" className="space-y-0">
-                <ReportsTab
-                  loanApplications={loanApplications}
-                  submissions={submissions}
-                  localLoanStatuses={localLoanStatuses}
-                />
-              </TabsContent>
-            )}
-            {/* ── EMI Tracker Tab (Accounts only) ── */}
-            {session?.role === "accounts" && (
-              <TabsContent value="emi" className="space-y-0">
-                <EMITrackerTab
-                  loanApplications={loanApplications}
-                  localLoanStatuses={localLoanStatuses}
-                />
-              </TabsContent>
-            )}
-            {/* ── Doc Verification Tab (Operations only) ── */}
-            {session?.role === "operations" && (
-              <TabsContent value="processing" className="space-y-0">
-                <DocVerificationTab
-                  loanApplications={loanApplications}
-                  localLoanStatuses={localLoanStatuses}
-                />
-              </TabsContent>
-            )}
-            {/* ── Settings Tab ── */}
-            {permissions.canViewSettings ? (
-              <TabsContent value="settings" className="space-y-0">
-                <LogoUploadSettings />
-              </TabsContent>
-            ) : (
-              <TabsContent value="settings" className="space-y-0">
-                <AccessDeniedPanel message="Settings tab sirf Admin ke liye accessible hai. Please Admin se contact karein." />
-              </TabsContent>
-            )}
-          </Tabs>
-        </main>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* ── Session Timeout Warning Modal ── */}
-      <AnimatePresence>
-        {showTimeoutWarning && (
-          <SessionTimeoutModal
-            countdown={timeoutCountdown}
-            onExtend={extendSession}
-            onLogout={doLogout}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
-// ─── Logo Upload Settings Component ──────────────────────────────────────────
+// ─── Loan Applications Section ─────────────────────────────────────────────────────────
 
-const DEFAULT_LOGO = "/assets/generated/jmd-fincap-logo-real.png";
-export const LOGO_STORAGE_KEY = "jmd_custom_logo";
+function LoanApplicationsSection({
+  role,
+  applications,
+}: { role: RoleId; applications: any[] }) {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [localApps, setLocalApps] = useState(() => {
+    return [
+      ...applications,
+      ...JSON.parse(localStorage.getItem("loanApplications") || "[]"),
+    ];
+  });
 
-export function getActiveLogo(): string {
-  try {
-    const stored = localStorage.getItem(LOGO_STORAGE_KEY);
-    if (stored?.startsWith("data:")) return stored;
-  } catch {
-    // ignore
-  }
-  return DEFAULT_LOGO;
-}
+  const updateStatus = (idx: number, status: string) => {
+    const updated = [...localApps];
+    updated[idx] = { ...updated[idx], status };
+    setLocalApps(updated);
+    // Persist to localStorage
+    const allSaved = JSON.parse(
+      localStorage.getItem("loanApplications") || "[]",
+    );
+    const appId = updated[idx].id;
+    const savedIdx = allSaved.findIndex((a: any) => a.id === appId);
+    if (savedIdx >= 0) {
+      allSaved[savedIdx].status = status;
+      localStorage.setItem("loanApplications", JSON.stringify(allSaved));
+    }
+    toast.success(`Application ${status}`);
+  };
 
-function LogoUploadSettings() {
-  const [logoPreview, setLogoPreview] = useState<string>(getActiveLogo());
-  const [uploading, setUploading] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      // Validate type
-      if (!file.type.startsWith("image/")) {
-        toast.error("Sirf image file upload karein (JPG, PNG, WebP)");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("File size 5MB se kam honi chahiye");
-        return;
-      }
-
-      setUploading(true);
-      setSaved(false);
-
-      try {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        // Compress image
-        const compressed = await new Promise<string>((resolve) => {
-          const img = new window.Image();
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            const MAX = 600;
-            let { width, height } = img;
-            if (width > MAX || height > MAX) {
-              if (width > height) {
-                height = Math.round((height * MAX) / width);
-                width = MAX;
-              } else {
-                width = Math.round((width * MAX) / height);
-                height = MAX;
-              }
-            }
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            if (ctx) ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.82));
-          };
-          img.src = dataUrl;
-        });
-
-        localStorage.setItem(LOGO_STORAGE_KEY, compressed);
-        setLogoPreview(compressed);
-        setSaved(true);
-        toast.success("Logo save ho gaya! Website par ab naya logo dikhega.", {
-          description: "Page refresh karein to logo update dekhein.",
-        });
-      } catch {
-        toast.error("Logo upload nahi hua. Dobara try karein.");
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    },
-    [],
-  );
-
-  const handleReset = useCallback(() => {
-    localStorage.removeItem(LOGO_STORAGE_KEY);
-    setLogoPreview(DEFAULT_LOGO);
-    setSaved(false);
-    toast.success("Logo default par reset ho gaya.");
-  }, []);
+  const filtered = localApps.filter((a) => {
+    const matchSearch = (a.fullName || a.firstName || "")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    const matchStatus =
+      statusFilter === "all" || (a.status || "pending") === statusFilter;
+    return matchSearch && matchStatus;
+  });
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.5 }}
-      className="max-w-2xl"
-    >
-      <div className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <h2 className="font-display text-lg font-bold text-navy-900 flex items-center gap-2">
-            <Image className="h-5 w-5 text-gold-500" />
-            Website Logo Settings
-          </h2>
-          <p className="font-body text-xs text-gray-500 mt-1">
-            Yahan se aap website ka logo upload karke replace kar sakte hain.
-            JPG, PNG, WebP format supported hai.
-          </p>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search by name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-ocid="loans.search.input"
+            className="pl-9 rounded-xl"
+          />
         </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger
+            className="w-40 rounded-xl"
+            data-ocid="loans.status.select"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-        <div className="p-6 space-y-6">
-          {/* Current Logo Preview */}
-          <div>
-            <p className="font-body text-sm font-semibold text-gray-700 mb-3">
-              Current Logo (Preview)
-            </p>
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 bg-gray-50 flex items-center justify-center min-h-[120px]">
-              <img
-                src={logoPreview}
-                alt="Current logo"
-                className="max-h-24 w-auto object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Upload Section */}
-          <div>
-            <p className="font-body text-sm font-semibold text-gray-700 mb-3">
-              Naya Logo Upload Karein
-            </p>
-            <div className="space-y-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-                id="logo-upload-input"
-              />
-              <label htmlFor="logo-upload-input">
-                <div
-                  className={`
-                    flex flex-col items-center justify-center gap-3 px-6 py-10 
-                    border-2 border-dashed rounded-xl cursor-pointer transition-colors duration-200
-                    ${uploading ? "border-gold-300 bg-gold-50" : "border-gray-200 bg-gray-50 hover:border-gold-400 hover:bg-gold-50"}
-                  `}
-                >
-                  {uploading ? (
-                    <Loader2 className="h-8 w-8 text-gold-500 animate-spin" />
-                  ) : (
-                    <Upload className="h-8 w-8 text-gray-400" />
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table data-ocid="loans.table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Loan ID</TableHead>
+                  <TableHead>Customer Name</TableHead>
+                  <TableHead>Loan Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Date</TableHead>
+                  {(role === "admin" || role === "bm") && (
+                    <TableHead>Actions</TableHead>
                   )}
-                  <div className="text-center">
-                    <p className="font-body text-sm font-semibold text-navy-900">
-                      {uploading
-                        ? "Upload ho raha hai..."
-                        : "Logo file select karein"}
-                    </p>
-                    <p className="font-body text-xs text-gray-400 mt-1">
-                      JPG, PNG, WebP · Max 5MB · Transparent PNG best result
-                      deta hai
-                    </p>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-gray-400"
+                      data-ocid="loans.table.empty_state"
+                    >
+                      No applications found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((app, i) => (
+                    <TableRow
+                      key={app.id || String(i)}
+                      data-ocid={`loans.table.row.${i + 1}`}
+                    >
+                      <TableCell className="font-mono text-xs">
+                        {app.id || `LN${String(i + 1).padStart(3, "0")}`}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {app.fullName || app.firstName || "N/A"}
+                      </TableCell>
+                      <TableCell>{app.loanType || "N/A"}</TableCell>
+                      <TableCell>
+                        ₹{Number(app.loanAmount || 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {app.loanDuration || app.tenure || "N/A"} mo
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={app.status || "pending"} />
+                      </TableCell>
+                      <TableCell className="text-xs text-gray-500">
+                        {app.submittedAt
+                          ? new Date(app.submittedAt).toLocaleDateString(
+                              "en-IN",
+                            )
+                          : "N/A"}
+                      </TableCell>
+                      {(role === "admin" || role === "bm") && (
+                        <TableCell>
+                          <div className="flex gap-2">
+                            {app.status !== "approved" && (
+                              <Button
+                                size="sm"
+                                onClick={() => updateStatus(i, "approved")}
+                                data-ocid={`loans.approve.button.${i + 1}`}
+                                className="h-7 rounded-full text-xs bg-green-500 hover:bg-green-600 text-white"
+                              >
+                                Approve
+                              </Button>
+                            )}
+                            {app.status !== "rejected" && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => updateStatus(i, "rejected")}
+                                data-ocid={`loans.reject.button.${i + 1}`}
+                                className="h-7 rounded-full text-xs"
+                              >
+                                Reject
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Leads Section ──────────────────────────────────────────────────────────────────────
+
+function LeadsSection() {
+  const [search, setSearch] = useState("");
+  const [leads, setLeads] = useState(MOCK_LEADS);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newLead, setNewLead] = useState({
+    name: "",
+    phone: "",
+    city: "",
+    loanType: "",
+    amount: "",
+  });
+
+  const filtered = leads.filter(
+    (l) =>
+      l.name.toLowerCase().includes(search.toLowerCase()) ||
+      l.phone.includes(search),
+  );
+
+  const addLead = () => {
+    if (!newLead.name || !newLead.phone) {
+      toast.error("Name and phone required");
+      return;
+    }
+    setLeads((p) => [
+      ...p,
+      {
+        id: `LD${String(p.length + 1).padStart(3, "0")}`,
+        ...newLead,
+        source: "Manual",
+        crm: "Unassigned",
+        status: "New",
+      },
+    ]);
+    setNewLead({ name: "", phone: "", city: "", loanType: "", amount: "" });
+    setShowAdd(false);
+    toast.success("Lead added successfully!");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search leads..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-ocid="leads.search.input"
+            className="pl-9 rounded-xl"
+          />
+        </div>
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+          <DialogTrigger asChild>
+            <Button
+              data-ocid="leads.add.button"
+              className="bg-gold-500 hover:bg-gold-400 text-navy-900 gap-2 rounded-xl"
+            >
+              <Plus className="h-4 w-4" /> Add Lead
+            </Button>
+          </DialogTrigger>
+          <DialogContent data-ocid="leads.add.dialog">
+            <DialogHeader>
+              <DialogTitle className="font-display">Add New Lead</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs uppercase tracking-wide mb-2 block">
+                    Name *
+                  </Label>
+                  <Input
+                    data-ocid="leads.name.input"
+                    value={newLead.name}
+                    onChange={(e) =>
+                      setNewLead((p) => ({ ...p, name: e.target.value }))
+                    }
+                    placeholder="Customer name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wide mb-2 block">
+                    Phone *
+                  </Label>
+                  <Input
+                    data-ocid="leads.phone.input"
+                    value={newLead.phone}
+                    onChange={(e) =>
+                      setNewLead((p) => ({ ...p, phone: e.target.value }))
+                    }
+                    placeholder="10-digit mobile"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wide mb-2 block">
+                    City
+                  </Label>
+                  <Input
+                    value={newLead.city}
+                    onChange={(e) =>
+                      setNewLead((p) => ({ ...p, city: e.target.value }))
+                    }
+                    placeholder="City"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wide mb-2 block">
+                    Loan Type
+                  </Label>
+                  <Select
+                    value={newLead.loanType}
+                    onValueChange={(v) =>
+                      setNewLead((p) => ({ ...p, loanType: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["Personal", "Business", "Gold", "Home"].map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wide mb-2 block">
+                  Loan Amount
+                </Label>
+                <Input
+                  value={newLead.amount}
+                  onChange={(e) =>
+                    setNewLead((p) => ({ ...p, amount: e.target.value }))
+                  }
+                  placeholder="e.g., 2,50,000"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowAdd(false)}
+                data-ocid="leads.cancel.button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={addLead}
+                data-ocid="leads.confirm.button"
+                className="bg-gold-500 text-navy-900"
+              >
+                Add Lead
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table data-ocid="leads.table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lead ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Loan Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>CRM</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((lead, i) => (
+                  <TableRow
+                    key={lead.id}
+                    data-ocid={`leads.table.row.${i + 1}`}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      {lead.id}
+                    </TableCell>
+                    <TableCell className="font-medium">{lead.name}</TableCell>
+                    <TableCell>{lead.phone}</TableCell>
+                    <TableCell>{lead.city}</TableCell>
+                    <TableCell>{lead.loanType}</TableCell>
+                    <TableCell>₹{lead.amount}</TableCell>
+                    <TableCell>{lead.source}</TableCell>
+                    <TableCell>{lead.crm}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={lead.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Customers Section ─────────────────────────────────────────────────────────────────
+
+function CustomersSection() {
+  const [search, setSearch] = useState("");
+  const filtered = MOCK_CUSTOMERS.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()),
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search customers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-ocid="customers.search.input"
+            className="pl-9 rounded-xl"
+          />
+        </div>
+        <Button
+          data-ocid="customers.add.button"
+          className="bg-gold-500 hover:bg-gold-400 text-navy-900 gap-2 rounded-xl"
+        >
+          <Plus className="h-4 w-4" /> Add Customer
+        </Button>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table data-ocid="customers.table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Employment</TableHead>
+                  <TableHead>Monthly Income</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((c, i) => (
+                  <TableRow
+                    key={c.id}
+                    data-ocid={`customers.table.row.${i + 1}`}
+                  >
+                    <TableCell className="font-mono text-xs">{c.id}</TableCell>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell>{c.phone}</TableCell>
+                    <TableCell>{c.city}</TableCell>
+                    <TableCell>{c.employment}</TableCell>
+                    <TableCell>{c.income}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={c.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Documents Section ──────────────────────────────────────────────────────────────────
+
+function DocumentsSection({ role }: { role: RoleId }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [docs, setDocs] = useState(MOCK_DOCS);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-3 flex-wrap">
+        {(role === "admin" || role === "crm") && (
+          <Button
+            onClick={() => fileRef.current?.click()}
+            data-ocid="documents.upload.button"
+            className="bg-gold-500 hover:bg-gold-400 text-navy-900 gap-2 rounded-xl"
+          >
+            <Upload className="h-4 w-4" /> Upload Document
+          </Button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          className="hidden"
+          onChange={() => toast.success("Document uploaded!")}
+        />
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table data-ocid="documents.table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Doc ID</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Document Type</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {docs.map((doc, i) => (
+                  <TableRow
+                    key={doc.id}
+                    data-ocid={`documents.table.row.${i + 1}`}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      {doc.id}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {doc.customer}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="text-xs bg-blue-100 text-blue-700 border-0">
+                        {doc.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-500">
+                      {doc.uploadedAt}
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-500">
+                      {doc.size}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={doc.status} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => toast.success("Downloading...")}
+                          data-ocid={`documents.download.button.${i + 1}`}
+                          className="h-7 gap-1 text-xs"
+                        >
+                          <Download className="h-3 w-3" /> Download
+                        </Button>
+                        {(role === "admin" || role === "operations") &&
+                          doc.status === "Pending" && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const d = [...docs];
+                                d[i] = { ...d[i], status: "Verified" };
+                                setDocs(d);
+                                toast.success("Verified!");
+                              }}
+                              className="h-7 text-xs bg-green-500 hover:bg-green-600 text-white rounded-full"
+                            >
+                              Verify
+                            </Button>
+                          )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Follow-ups Section ───────────────────────────────────────────────────────────────
+
+function FollowupsSection() {
+  const [followups, setFollowups] = useState(MOCK_FOLLOWUPS);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newFU, setNewFU] = useState({
+    customer: "",
+    phone: "",
+    date: "",
+    notes: "",
+    crm: "",
+  });
+
+  const add = () => {
+    if (!newFU.customer || !newFU.phone) {
+      toast.error("Required fields missing");
+      return;
+    }
+    setFollowups((p) => [...p, newFU]);
+    setNewFU({ customer: "", phone: "", date: "", notes: "", crm: "" });
+    setShowAdd(false);
+    toast.success("Follow-up added!");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+          <DialogTrigger asChild>
+            <Button
+              data-ocid="followups.add.button"
+              className="bg-gold-500 hover:bg-gold-400 text-navy-900 gap-2 rounded-xl"
+            >
+              <Plus className="h-4 w-4" /> Add Follow-up
+            </Button>
+          </DialogTrigger>
+          <DialogContent data-ocid="followups.add.dialog">
+            <DialogHeader>
+              <DialogTitle className="font-display">Add Follow-up</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs uppercase mb-2 block">
+                    Customer *
+                  </Label>
+                  <Input
+                    data-ocid="followups.customer.input"
+                    value={newFU.customer}
+                    onChange={(e) =>
+                      setNewFU((p) => ({ ...p, customer: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase mb-2 block">
+                    Phone *
+                  </Label>
+                  <Input
+                    data-ocid="followups.phone.input"
+                    value={newFU.phone}
+                    onChange={(e) =>
+                      setNewFU((p) => ({ ...p, phone: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase mb-2 block">Date</Label>
+                  <Input
+                    type="date"
+                    value={newFU.date}
+                    onChange={(e) =>
+                      setNewFU((p) => ({ ...p, date: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase mb-2 block">
+                    Assigned CRM
+                  </Label>
+                  <Input
+                    value={newFU.crm}
+                    onChange={(e) =>
+                      setNewFU((p) => ({ ...p, crm: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs uppercase mb-2 block">Notes</Label>
+                <Textarea
+                  value={newFU.notes}
+                  onChange={(e) =>
+                    setNewFU((p) => ({ ...p, notes: e.target.value }))
+                  }
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowAdd(false)}
+                data-ocid="followups.cancel.button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={add}
+                data-ocid="followups.confirm.button"
+                className="bg-gold-500 text-navy-900"
+              >
+                Add
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table data-ocid="followups.table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Follow-up Date</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Assigned CRM</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {followups.map((f, i) => (
+                <TableRow
+                  key={f.customer + f.date}
+                  data-ocid={`followups.table.row.${i + 1}`}
+                >
+                  <TableCell className="font-medium">{f.customer}</TableCell>
+                  <TableCell>{f.phone}</TableCell>
+                  <TableCell>{f.date}</TableCell>
+                  <TableCell className="text-sm text-gray-600 max-w-xs truncate">
+                    {f.notes}
+                  </TableCell>
+                  <TableCell>{f.crm}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── EMI Section ─────────────────────────────────────────────────────────────────────
+
+function EMISection() {
+  const [emis, setEmis] = useState(MOCK_EMI);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          {
+            label: "Total EMIs Due",
+            value: emis.filter(
+              (e) => e.status === "Pending" || e.status === "Overdue",
+            ).length,
+            color: "bg-yellow-50 text-yellow-700",
+          },
+          {
+            label: "Collected This Month",
+            value: emis.filter((e) => e.status === "Paid").length,
+            color: "bg-green-50 text-green-700",
+          },
+          {
+            label: "Overdue",
+            value: emis.filter((e) => e.status === "Overdue").length,
+            color: "bg-red-50 text-red-700",
+          },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className={`rounded-xl p-5 ${s.color} border border-current/10`}
+          >
+            <div className="text-2xl font-bold font-display">{s.value}</div>
+            <div className="text-sm mt-1">{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table data-ocid="emi.table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Loan ID</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>EMI Amount</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {emis.map((e, i) => (
+                <TableRow
+                  key={e.loanId || String(i)}
+                  data-ocid={`emi.table.row.${i + 1}`}
+                >
+                  <TableCell className="font-mono text-xs">
+                    {e.loanId}
+                  </TableCell>
+                  <TableCell className="font-medium">{e.customer}</TableCell>
+                  <TableCell>{e.amount}</TableCell>
+                  <TableCell>{e.dueDate}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={e.status} />
+                  </TableCell>
+                  <TableCell>
+                    {e.status !== "Paid" && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const d = [...emis];
+                          d[i] = { ...d[i], status: "Paid" };
+                          setEmis(d);
+                          toast.success("EMI marked as paid!");
+                        }}
+                        className="h-7 text-xs bg-green-500 hover:bg-green-600 text-white rounded-full"
+                        data-ocid={`emi.mark_paid.button.${i + 1}`}
+                      >
+                        Mark Paid
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Reports Section ─────────────────────────────────────────────────────────────────────
+
+function ReportsSection() {
+  const reports = [
+    {
+      name: "Daily Loan Report",
+      desc: "All loan applications for today",
+      icon: FileText,
+      color: "bg-blue-50 text-blue-600",
+    },
+    {
+      name: "Monthly Loan Report",
+      desc: "Month-wise loan disbursements and collections",
+      icon: BarChart3,
+      color: "bg-purple-50 text-purple-600",
+    },
+    {
+      name: "Lead Conversion Report",
+      desc: "Lead source analysis and conversion rates",
+      icon: TrendingUp,
+      color: "bg-emerald-50 text-emerald-600",
+    },
+    {
+      name: "Branch Performance Report",
+      desc: "Branch-wise metrics and target achievement",
+      icon: Building2,
+      color: "bg-orange-50 text-orange-600",
+    },
+    {
+      name: "Revenue Report",
+      desc: "Commission, fee income, and revenue summary",
+      icon: Wallet,
+      color: "bg-gold-50 text-gold-600",
+    },
+  ];
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {reports.map((r) => (
+        <Card key={r.name} className="hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div
+              className={`h-12 w-12 rounded-xl flex items-center justify-center mb-4 ${r.color}`}
+            >
+              <r.icon className="h-6 w-6" />
+            </div>
+            <h3 className="font-display font-semibold text-navy-900 mb-1">
+              {r.name}
+            </h3>
+            <p className="text-gray-500 text-xs mb-4">{r.desc}</p>
+            <Button
+              onClick={() =>
+                toast.success(`${r.name} generated!`, {
+                  description: "CSV file ready for download",
+                })
+              }
+              data-ocid={`reports.${r.name.toLowerCase().replace(/ /g, "_")}.button`}
+              variant="outline"
+              className="w-full gap-2 rounded-xl text-sm"
+            >
+              <Download className="h-4 w-4" /> Generate Report
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ─── User Management Section ─────────────────────────────────────────────────────────────
+
+function UserManagementSection() {
+  const [showAdd, setShowAdd] = useState(false);
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+          <DialogTrigger asChild>
+            <Button
+              data-ocid="users.add.button"
+              className="bg-gold-500 hover:bg-gold-400 text-navy-900 gap-2 rounded-xl"
+            >
+              <Plus className="h-4 w-4" /> Add User
+            </Button>
+          </DialogTrigger>
+          <DialogContent data-ocid="users.add.dialog">
+            <DialogHeader>
+              <DialogTitle className="font-display">Add New User</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              <div>
+                <Label className="text-xs uppercase mb-2 block">
+                  Full Name
+                </Label>
+                <Input data-ocid="users.name.input" placeholder="Full name" />
+              </div>
+              <div>
+                <Label className="text-xs uppercase mb-2 block">Email</Label>
+                <Input
+                  type="email"
+                  data-ocid="users.email.input"
+                  placeholder="email@jmdfincap.com"
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase mb-2 block">Role</Label>
+                <Select>
+                  <SelectTrigger data-ocid="users.role.select">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "Admin",
+                      "Branch Manager",
+                      "CRM",
+                      "Accounts",
+                      "Operations",
+                    ].map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase mb-2 block">
+                  Temporary Password
+                </Label>
+                <Input type="password" placeholder="Min 8 chars" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowAdd(false)}
+                data-ocid="users.cancel.button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowAdd(false);
+                  toast.success("User added!");
+                }}
+                data-ocid="users.confirm.button"
+                className="bg-gold-500 text-navy-900"
+              >
+                Add User
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table data-ocid="users.table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Last Login</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {MOCK_USERS.map((u, i) => (
+                <TableRow key={u.id} data-ocid={`users.table.row.${i + 1}`}>
+                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell className="text-sm text-gray-600">
+                    {u.email}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className="text-xs bg-navy-100 text-navy-700 border-0">
+                      {u.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={u.status} />
+                  </TableCell>
+                  <TableCell className="text-xs text-gray-500">
+                    {u.lastLogin}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => toast.success("Password reset link sent!")}
+                      data-ocid={`users.reset_password.button.${i + 1}`}
+                      className="h-7 text-xs"
+                    >
+                      Reset Password
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Branch Management Section ────────────────────────────────────────────────────────────
+
+function BranchManagementSection() {
+  return (
+    <div className="space-y-6">
+      <div className="grid sm:grid-cols-3 gap-4">
+        {MOCK_BRANCHES.map((b, i) => (
+          <Card key={b.id} data-ocid={`branches.card.${i + 1}`}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-12 w-12 rounded-xl bg-navy-50 flex items-center justify-center">
+                  <Building2 className="h-6 w-6 text-navy-600" />
+                </div>
+                <div>
+                  <div className="font-display font-semibold text-navy-900 text-sm">
+                    {b.name}
+                  </div>
+                  <div className="text-xs text-gray-500">{b.city}</div>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Manager</span>
+                  <span className="font-medium">{b.manager}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Customers</span>
+                  <span className="font-medium">
+                    {b.customers.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Active Loans</span>
+                  <span className="font-medium">{b.loans}</span>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <StatusBadge status={b.status} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Section ────────────────────────────────────────────────────────────────────
+
+function SettingsSection() {
+  return (
+    <Tabs defaultValue="products">
+      <TabsList className="mb-6">
+        <TabsTrigger value="products" data-ocid="settings.products.tab">
+          Loan Products
+        </TabsTrigger>
+        <TabsTrigger value="rates" data-ocid="settings.rates.tab">
+          Interest Rates
+        </TabsTrigger>
+        <TabsTrigger value="fees" data-ocid="settings.fees.tab">
+          Processing Fees
+        </TabsTrigger>
+        <TabsTrigger value="system" data-ocid="settings.system.tab">
+          System
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="products">
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="font-display font-semibold text-navy-900 mb-4">
+              Active Loan Products
+            </h3>
+            <div className="space-y-4">
+              {[
+                {
+                  type: "Personal Loan",
+                  minAmt: "50,000",
+                  maxAmt: "50,00,000",
+                  maxTenure: "60",
+                  active: true,
+                },
+                {
+                  type: "Business Loan",
+                  minAmt: "1,00,000",
+                  maxAmt: "2,00,00,000",
+                  maxTenure: "84",
+                  active: true,
+                },
+                {
+                  type: "Gold Loan",
+                  minAmt: "10,000",
+                  maxAmt: "50,00,000",
+                  maxTenure: "24",
+                  active: true,
+                },
+                {
+                  type: "Home Loan",
+                  minAmt: "5,00,000",
+                  maxAmt: "5,00,00,000",
+                  maxTenure: "240",
+                  active: true,
+                },
+              ].map((p) => (
+                <div
+                  key={p.type}
+                  className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100"
+                >
+                  <div>
+                    <div className="font-semibold text-navy-900">{p.type}</div>
+                    <div className="text-xs text-gray-500">
+                      ₹{p.minAmt} – ₹{p.maxAmt} &bull; Max {p.maxTenure} months
+                    </div>
+                  </div>
+                  <Badge className="bg-green-100 text-green-700 border-0">
+                    Active
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="rates">
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="font-display font-semibold text-navy-900 mb-4">
+              Interest Rate Configuration
+            </h3>
+            <div className="space-y-4">
+              {[
+                { type: "Personal Loan", rate: "10.5% - 18%" },
+                { type: "Business Loan", rate: "11% - 20%" },
+                { type: "Gold Loan", rate: "7% - 12%" },
+                { type: "Home Loan", rate: "8.5% - 12%" },
+              ].map((r) => (
+                <div
+                  key={r.type}
+                  className="flex items-center justify-between p-4 rounded-xl bg-gray-50"
+                >
+                  <span className="font-medium">{r.type}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-navy-700 font-semibold">
+                      {r.rate} p.a.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs rounded-full"
+                      onClick={() =>
+                        toast.info(
+                          "Rate configuration requires backend integration",
+                        )
+                      }
+                    >
+                      Edit
+                    </Button>
                   </div>
                 </div>
-              </label>
-
-              <div className="flex gap-3">
-                <Button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="flex-1 bg-navy-900 hover:bg-navy-700 text-white font-body text-sm"
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  {uploading ? "Upload ho raha hai..." : "Logo Upload Karein"}
-                </Button>
-                {logoPreview !== DEFAULT_LOGO && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReset}
-                    className="font-body text-sm border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-300"
-                  >
-                    Reset
-                  </Button>
-                )}
-              </div>
-
-              {saved && (
-                <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                  <p className="font-body text-sm text-green-700">
-                    Logo successfully save ho gaya! Website par ab naya logo
-                    dikhega -- page refresh karein.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="font-body text-xs font-semibold text-blue-700 mb-2 uppercase tracking-wide">
-              Logo Upload Guide
-            </p>
-            <ul className="space-y-1">
-              {[
-                "Transparent background wala PNG sabse accha dikhega",
-                "Logo ka size 300x100px se 600x200px ke beech rakhen",
-                "Upload ke baad website ka page refresh karein",
-                "Logo navbar, footer, admin panel sab jagah update hoga",
-              ].map((tip) => (
-                <li
-                  key={tip}
-                  className="font-body text-xs text-blue-600 flex items-start gap-2"
-                >
-                  <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
-                  {tip}
-                </li>
               ))}
-            </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="fees">
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="font-display font-semibold text-navy-900 mb-4">
+              Processing Fees
+            </h3>
+            <div className="space-y-3">
+              {[
+                { type: "Processing Fee", value: "1% - 2% of loan amount" },
+                {
+                  type: "Prepayment Charges",
+                  value: "2% of outstanding amount",
+                },
+                { type: "Late Payment Fee", value: "₹500 per month" },
+                { type: "Document Charges", value: "₹1,000 - ₹2,000" },
+              ].map((f) => (
+                <div
+                  key={f.type}
+                  className="flex justify-between p-3 rounded-lg bg-gray-50 text-sm"
+                >
+                  <span className="text-gray-600">{f.type}</span>
+                  <span className="font-medium text-navy-900">{f.value}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="system">
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="font-display font-semibold text-navy-900 mb-4">
+              System Configuration
+            </h3>
+            <div className="space-y-5">
+              <div>
+                <Label className="text-xs uppercase tracking-wide mb-2 block">
+                  Company Name
+                </Label>
+                <Input
+                  defaultValue="JMD FinCap Pvt. Ltd."
+                  className="rounded-xl"
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wide mb-2 block">
+                  Contact Email
+                </Label>
+                <Input
+                  defaultValue="contact.jmdfincap@gmail.com"
+                  type="email"
+                  className="rounded-xl"
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wide mb-2 block">
+                  Contact Phone
+                </Label>
+                <Input
+                  defaultValue="+91 88899 56204"
+                  type="tel"
+                  className="rounded-xl"
+                />
+              </div>
+              <Button
+                onClick={() => toast.success("Settings saved!")}
+                data-ocid="settings.save.button"
+                className="rounded-full bg-gold-500 hover:bg-gold-400 text-navy-900"
+              >
+                Save Settings
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+// ─── Section Title Map ────────────────────────────────────────────────────────────────
+
+const SECTION_TITLES: Record<SidebarSection, string> = {
+  dashboard: "Dashboard",
+  leads: "Leads Management",
+  customers: "Customer Database",
+  loans: "Loan Applications",
+  documents: "Document Management",
+  followups: "Follow-ups",
+  emi: "EMI Management",
+  reports: "Reports & Analytics",
+  users: "User Management",
+  branches: "Branch Management",
+  settings: "System Settings",
+};
+
+// ─── Main AdminDashboard Component ───────────────────────────────────────────────────────────
+
+export function AdminDashboard() {
+  const { actor, isFetching } = useActor();
+  const [activeSection, setActiveSection] =
+    useState<SidebarSection>("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const role = (localStorage.getItem("adminRole") || "admin") as RoleId;
+  const adminEmail =
+    localStorage.getItem("adminEmail") || "admin@jmdfincap.com";
+  const adminToken = localStorage.getItem("adminToken");
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!adminToken) {
+      window.location.href = "/admin/login";
+    }
+  }, [adminToken]);
+
+  const { data: backendApps = [] } = useQuery({
+    queryKey: ["loanApplications", adminToken],
+    queryFn: async () => {
+      if (!actor || !adminToken) return [];
+      try {
+        const apps = await actor.getAllLoanApplications(adminToken);
+        return Array.isArray(apps) ? apps : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching && !!adminToken,
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminRole");
+    localStorage.removeItem("adminEmail");
+    toast.success("Logged out successfully.");
+    window.location.href = "/admin/login";
+  };
+
+  const visibleItems = SIDEBAR_ITEMS.filter((item) =>
+    item.roles.includes(role),
+  );
+  const roleLabel: Record<RoleId, string> = {
+    admin: "Admin",
+    bm: "Branch Manager",
+    crm: "CRM Executive",
+    accounts: "Accounts",
+    operations: "Operations",
+  };
+  const roleBadgeColor: Record<RoleId, string> = {
+    admin: "bg-yellow-500/20 text-yellow-300",
+    bm: "bg-blue-500/20 text-blue-300",
+    crm: "bg-green-500/20 text-green-300",
+    accounts: "bg-purple-500/20 text-purple-300",
+    operations: "bg-orange-500/20 text-orange-300",
+  };
+
+  if (!adminToken) return null;
+
+  return (
+    <div className="min-h-screen flex bg-gray-100">
+      {/* Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-navy-900 flex flex-col transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:static lg:translate-x-0`}
+      >
+        {/* Sidebar Header */}
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+          <img
+            src={LOGO}
+            alt="JMD FinCap"
+            className="h-10 w-auto object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+          <div>
+            <div className="font-display font-bold text-white text-sm">
+              JMD FinCap
+            </div>
+            <div className="text-white/40 text-xs">CRM Dashboard</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="ml-auto lg:hidden text-white/40 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Role Badge */}
+        <div className="px-5 py-3 border-b border-white/10">
+          <div
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${roleBadgeColor[role]}`}
+          >
+            <Shield className="h-3 w-3" />
+            {roleLabel[role]}
           </div>
         </div>
+
+        {/* Nav Items */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3">
+          {visibleItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setActiveSection(item.id);
+                setSidebarOpen(false);
+              }}
+              data-ocid={`sidebar.${item.id}.link`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-medium transition-all mb-1 ${
+                activeSection === item.id
+                  ? "bg-gold-500/20 text-gold-400 border border-gold-500/30"
+                  : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+              }`}
+            >
+              <item.icon className="h-5 w-5 shrink-0" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-white/10">
+          <button
+            type="button"
+            onClick={handleLogout}
+            data-ocid="sidebar.logout.button"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          onKeyDown={(e) => e.key === "Escape" && setSidebarOpen(false)}
+          role="presentation"
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-100 shadow-xs px-4 sm:px-6 h-16 flex items-center gap-4 sticky top-0 z-20">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden p-2 text-navy-700 hover:bg-gray-100 rounded-lg"
+            aria-label="Open sidebar"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-ocid="header.search.input"
+              className="pl-9 h-9 rounded-xl border-gray-200 text-sm"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 ml-auto">
+            <button
+              type="button"
+              className="relative p-2 text-gray-400 hover:text-navy-700 hover:bg-gray-100 rounded-lg"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
+            </button>
+
+            <div className="flex items-center gap-2 pl-3 border-l border-gray-100">
+              <div className="h-8 w-8 rounded-full bg-gold-500 flex items-center justify-center">
+                <span className="text-navy-900 font-bold text-xs">
+                  {adminEmail.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="hidden sm:block">
+                <div className="text-xs font-semibold text-navy-900">
+                  {roleLabel[role]}
+                </div>
+                <div className="text-xs text-gray-400">{adminEmail}</div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-gray-400 hidden sm:block" />
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="mb-6">
+            <h1 className="font-display text-xl font-bold text-navy-900">
+              {SECTION_TITLES[activeSection]}
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              JMD FinCap &bull; {roleLabel[role]} Panel
+            </p>
+          </div>
+
+          {activeSection === "dashboard" && (
+            <DashboardSection role={role} loanApplications={backendApps} />
+          )}
+          {activeSection === "leads" && <LeadsSection />}
+          {activeSection === "customers" && <CustomersSection />}
+          {activeSection === "loans" && (
+            <LoanApplicationsSection role={role} applications={backendApps} />
+          )}
+          {activeSection === "documents" && <DocumentsSection role={role} />}
+          {activeSection === "followups" && <FollowupsSection />}
+          {activeSection === "emi" && <EMISection />}
+          {activeSection === "reports" && <ReportsSection />}
+          {activeSection === "users" && <UserManagementSection />}
+          {activeSection === "branches" && <BranchManagementSection />}
+          {activeSection === "settings" && <SettingsSection />}
+        </main>
       </div>
-    </motion.div>
+    </div>
   );
 }
