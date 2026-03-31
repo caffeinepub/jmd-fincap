@@ -310,7 +310,7 @@ function Step1({
           className={inputCls}
           value={data.fullName}
           onChange={(e) => set("fullName", e.target.value)}
-          placeholder="Apna poora naam likhein"
+          placeholder="Enter your full name"
           required
         />
       </FieldGroup>
@@ -319,7 +319,7 @@ function Step1({
           className={inputCls}
           value={data.fatherName}
           onChange={(e) => set("fatherName", e.target.value)}
-          placeholder="Pita / Pati ka naam"
+          placeholder="Enter father / husband name"
           required
         />
       </FieldGroup>
@@ -335,7 +335,7 @@ function Step1({
       <FieldGroup label="Gender *">
         <Select value={data.gender} onValueChange={(v) => set("gender", v)}>
           <SelectTrigger className={inputCls}>
-            <SelectValue placeholder="Gender chunein" />
+            <SelectValue placeholder="Select Gender" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="male">Male</SelectItem>
@@ -374,12 +374,12 @@ function Step2({
 }: { data: FormData; set: (k: keyof FormData, v: string) => void }) {
   return (
     <div className="grid sm:grid-cols-2 gap-5">
-      <FieldGroup label="Aadhar Number *">
+      <FieldGroup label="Aadhaar Number *">
         <Input
           className={inputCls}
           value={data.aadharNumber}
           onChange={(e) => set("aadharNumber", e.target.value)}
-          placeholder="12-digit Aadhar number"
+          placeholder="12-digit Aadhaar number"
           maxLength={12}
           required
         />
@@ -395,7 +395,7 @@ function Step2({
         />
       </FieldGroup>
       <FileUploadField
-        label="Upload Aadhar Card *"
+        label="Upload Aadhaar Card *"
         value={data.aadharFile}
         onChange={(v) => set("aadharFile", v)}
       />
@@ -509,7 +509,7 @@ function Step4({
           className={inputCls}
           value={data.companyName}
           onChange={(e) => set("companyName", e.target.value)}
-          placeholder="Company ya Business naam"
+          placeholder="Enter company or business name"
           required
         />
       </FieldGroup>
@@ -519,7 +519,7 @@ function Step4({
           type="number"
           value={data.monthlyIncome}
           onChange={(e) => set("monthlyIncome", e.target.value)}
-          placeholder="Monthly aay (Rupees mein)"
+          placeholder="Enter monthly income (INR)"
           required
         />
       </FieldGroup>
@@ -529,7 +529,7 @@ function Step4({
           type="number"
           value={data.workExperience}
           onChange={(e) => set("workExperience", e.target.value)}
-          placeholder="Kitne saal ka anubhav"
+          placeholder="Enter years of work experience"
           required
         />
       </FieldGroup>
@@ -551,7 +551,7 @@ function Step5({
       <FieldGroup label="Loan Type *">
         <Select value={data.loanType} onValueChange={(v) => set("loanType", v)}>
           <SelectTrigger className={inputCls}>
-            <SelectValue placeholder="Loan type chunein" />
+            <SelectValue placeholder="Select Loan Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="Personal Loan">Personal Loan</SelectItem>
@@ -571,7 +571,7 @@ function Step5({
             type="number"
             value={data.loanAmount}
             onChange={(e) => set("loanAmount", e.target.value)}
-            placeholder="Kitna loan chahiye?"
+            placeholder="Enter desired loan amount"
             required
           />
         </div>
@@ -600,7 +600,7 @@ function Step5({
             className="rounded-xl resize-none"
             value={data.loanPurpose}
             onChange={(e) => set("loanPurpose", e.target.value)}
-            placeholder="Loan kisliye chahiye? (e.g., ghar banana, business shuru karna)"
+            placeholder="Describe the purpose of the loan (e.g., home construction, business expansion)"
             rows={3}
             required
           />
@@ -621,7 +621,7 @@ function Step6({
           className={inputCls}
           value={data.refName}
           onChange={(e) => set("refName", e.target.value)}
-          placeholder="Reference ka poora naam"
+          placeholder="Enter reference full name"
           required
         />
       </FieldGroup>
@@ -643,7 +643,7 @@ function Step6({
             onValueChange={(v) => set("refRelation", v)}
           >
             <SelectTrigger className={inputCls}>
-              <SelectValue placeholder="Rishta chunein" />
+              <SelectValue placeholder="Select Relationship" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Friend">Friend</SelectItem>
@@ -704,11 +704,11 @@ function Step7({
         title="KYC Details"
         items={[
           [
-            "Aadhar Number",
+            "Aadhaar Number",
             data.aadharNumber ? `XXXX XXXX ${data.aadharNumber.slice(-4)}` : "",
           ],
           ["PAN Number", data.panNumber],
-          ["Aadhar Card", data.aadharFile ? "Uploaded ✓" : ""],
+          ["Aadhaar Card", data.aadharFile ? "Uploaded ✓" : ""],
           ["PAN Card", data.panFile ? "Uploaded ✓" : ""],
           ["Live Photo", data.livePhoto ? "Uploaded ✓" : ""],
         ]}
@@ -771,9 +771,9 @@ function Step7({
           htmlFor="agree"
           className="text-sm text-navy-700 cursor-pointer leading-relaxed"
         >
-          Main ghoshit karta/karti hoon ki upar di gayi saari jaankari sahi aur
-          sacchi hai. Main JMD FinCap ke niyam aur sharten se sahmat hoon aur
-          loan ke liye apply karne ki anumati deta/deti hoon.
+          I hereby declare that all the information provided above is true and
+          accurate. I agree to the terms and conditions of JMD FinCap and
+          authorize the processing of my loan application.
         </Label>
       </div>
     </div>
@@ -905,8 +905,8 @@ export function LoanApplicationPage() {
             Application Submitted!
           </h1>
           <p className="text-gray-500 mb-6 leading-relaxed">
-            Aapka loan application successfully submit ho gaya hai. Hamari team
-            aapko 24-48 ghante mein contact karegi.
+            Your loan application has been successfully submitted. Our team will
+            contact you within 24-48 hours.
           </p>
           <div className="bg-gold-50 rounded-xl p-5 border border-gold-200 mb-8">
             <div className="text-xs text-gray-500 mb-1">Application ID</div>
