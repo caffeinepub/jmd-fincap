@@ -799,11 +799,11 @@ export function LoanApplicationPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const id = `JMD${Date.now().toString().slice(-8)}`;
+      let id = `JMD${Date.now().toString().slice(-8)}`;
       const appData = {
         ...data,
         id,
-        status: "pending",
+        status: "New",
         submittedAt: new Date().toISOString(),
       };
 
@@ -815,25 +815,36 @@ export function LoanApplicationPage() {
       // Try backend
       if (actor && !isFetching) {
         try {
-          await actor.submitLoanApplication(
+          const generatedId = await actor.submitWorkflowApplication(
             data.fullName,
             "",
-            data.dob,
-            "",
             data.fatherName,
+            "",
+            data.dob,
+            data.gender,
+            data.mobile,
+            data.email,
             data.aadharNumber,
             data.panNumber,
-            data.loanPurpose,
-            data.loanType,
-            String(data.loanDuration),
-            data.loanAmount,
-            data.monthlyIncome,
+            data.currentAddress,
+            data.permanentAddress,
             data.occupation,
+            data.companyName,
+            data.monthlyIncome,
+            data.workExperience,
+            data.loanType,
+            data.loanAmount,
+            String(data.loanDuration),
+            data.loanPurpose,
+            data.refName,
+            data.refMobile,
+            data.refRelation,
             data.aadharFile,
             data.panFile,
             data.livePhoto,
-            "",
+            data.electricityBill,
           );
+          if (generatedId) id = generatedId;
         } catch (err) {
           console.error("Backend save failed:", err);
         }

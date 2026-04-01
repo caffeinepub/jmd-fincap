@@ -117,6 +117,46 @@ export interface LoanApplication {
     monthlyIncome: string;
     firstName: string;
 }
+export interface WorkflowApplication {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fatherName: string;
+    motherName: string;
+    dateOfBirth: string;
+    gender: string;
+    mobile: string;
+    email: string;
+    aadharNumber: string;
+    panNumber: string;
+    currentAddress: string;
+    permanentAddress: string;
+    occupation: string;
+    companyName: string;
+    monthlyIncome: string;
+    workExperience: string;
+    loanType: string;
+    loanAmount: string;
+    tenure: string;
+    loanPurpose: string;
+    reference1Name: string;
+    reference1Mobile: string;
+    reference1Relation: string;
+    aadharCardFile: string;
+    panCardFile: string;
+    photoFile: string;
+    electricityBillFile: string;
+    status: string;
+    createdAt: Time;
+    updatedAt: Time;
+}
+export interface AuditEntry {
+    applicationId: string;
+    action: string;
+    performedBy: string;
+    remark: string;
+    timestamp: Time;
+}
 export type Time = bigint;
 export interface UserProfile {
     name: string;
@@ -142,6 +182,18 @@ export interface backendInterface {
     submitContactForm(name: string, phone: string, email: string, serviceInterest: string, message: string): Promise<void>;
     submitLoanApplication(firstName: string, lastName: string, dateOfBirth: string, motherName: string, fatherName: string, aadharNumber: string, panNumber: string, loanPurpose: string, loanType: string, tenure: string, loanAmount: string, monthlyIncome: string, employeeType: string, aadharCardFile: string, panCardFile: string, photoFile: string, signatureFile: string): Promise<void>;
     validateAdminSession(token: string): Promise<boolean>;
+    adminApprove(appId: string, token: string, remark: string): Promise<boolean>;
+    adminReject(appId: string, token: string, remark: string): Promise<boolean>;
+    bmApprove(appId: string, token: string, remark: string): Promise<boolean>;
+    bmReject(appId: string, token: string, remark: string): Promise<boolean>;
+    forwardToBM(appId: string, token: string, remark: string): Promise<boolean>;
+    getAllWorkflowApplications(token: string): Promise<Array<WorkflowApplication>>;
+    getApplicationsByStatus(status: string, token: string): Promise<Array<WorkflowApplication>>;
+    getAuditTrail(appId: string, token: string): Promise<Array<AuditEntry>>;
+    getWorkflowApplication(appId: string, token: string): Promise<WorkflowApplication | null>;
+    markDisbursed(appId: string, token: string, remark: string): Promise<boolean>;
+    markUnderCRMReview(appId: string, token: string, remark: string): Promise<boolean>;
+    submitWorkflowApplication(firstName: string, lastName: string, fatherName: string, motherName: string, dateOfBirth: string, gender: string, mobile: string, email: string, aadharNumber: string, panNumber: string, currentAddress: string, permanentAddress: string, occupation: string, companyName: string, monthlyIncome: string, workExperience: string, loanType: string, loanAmount: string, tenure: string, loanPurpose: string, reference1Name: string, reference1Mobile: string, reference1Relation: string, aadharCardFile: string, panCardFile: string, photoFile: string, electricityBillFile: string): Promise<string>;
 }
 import type { UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -342,6 +394,56 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+
+    async submitWorkflowApplication(...args: any[]): Promise<string> {
+        const result = await (this.actor as any).submitWorkflowApplication(...args);
+        return result as string;
+    }
+    async getAllWorkflowApplications(token: string): Promise<Array<WorkflowApplication>> {
+        const result = await (this.actor as any).getAllWorkflowApplications(token);
+        return result as Array<WorkflowApplication>;
+    }
+    async getApplicationsByStatus(status: string, token: string): Promise<Array<WorkflowApplication>> {
+        const result = await (this.actor as any).getApplicationsByStatus(status, token);
+        return result as Array<WorkflowApplication>;
+    }
+    async getWorkflowApplication(appId: string, token: string): Promise<WorkflowApplication | null> {
+        const result = await (this.actor as any).getWorkflowApplication(appId, token);
+        return result as WorkflowApplication | null;
+    }
+    async getAuditTrail(appId: string, token: string): Promise<Array<AuditEntry>> {
+        const result = await (this.actor as any).getAuditTrail(appId, token);
+        return result as Array<AuditEntry>;
+    }
+    async markUnderCRMReview(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).markUnderCRMReview(appId, token, remark);
+        return result as boolean;
+    }
+    async forwardToBM(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).forwardToBM(appId, token, remark);
+        return result as boolean;
+    }
+    async bmApprove(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).bmApprove(appId, token, remark);
+        return result as boolean;
+    }
+    async bmReject(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).bmReject(appId, token, remark);
+        return result as boolean;
+    }
+    async adminApprove(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).adminApprove(appId, token, remark);
+        return result as boolean;
+    }
+    async adminReject(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).adminReject(appId, token, remark);
+        return result as boolean;
+    }
+    async markDisbursed(appId: string, token: string, remark: string): Promise<boolean> {
+        const result = await (this.actor as any).markDisbursed(appId, token, remark);
+        return result as boolean;
+    }
+
     async validateAdminSession(arg0: string): Promise<boolean> {
         if (this.processError) {
             try {

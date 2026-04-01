@@ -95,7 +95,17 @@ export function AdminLogin() {
       }
 
       // Try backend login
-      let token = `local_${selectedRole}_${Date.now()}`;
+      const rolePrefix =
+        selectedRole === "admin"
+          ? "jmd_admin_"
+          : selectedRole === "bm"
+            ? "jmd_bm_"
+            : selectedRole === "crm"
+              ? "jmd_crm_"
+              : selectedRole === "accounts"
+                ? "jmd_accounts_"
+                : "jmd_operations_";
+      let token = `${rolePrefix}${Date.now()}`;
       if (actor && !isFetching) {
         try {
           const result = await actor.adminLogin(email, password);

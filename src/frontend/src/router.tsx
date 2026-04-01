@@ -7,11 +7,15 @@ import {
 import { AboutPage } from "./pages/AboutPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { AdminLogin } from "./pages/AdminLogin";
+import { AdminWorkflowDashboard } from "./pages/AdminWorkflowDashboard";
+import { BMDashboard } from "./pages/BMDashboard";
+import { CRMDashboard } from "./pages/CRMDashboard";
 import { ContactPage } from "./pages/ContactPage";
 import { CustomerDashboard } from "./pages/CustomerDashboard";
 import { CustomerLogin } from "./pages/CustomerLogin";
 import { HomePage } from "./pages/HomePage";
 import { LoanApplicationPage } from "./pages/LoanApplicationPage";
+import { OperationsDashboard } from "./pages/OperationsDashboard";
 import { SanctionLetterPage } from "./pages/SanctionLetterPage";
 import { ServicesPage } from "./pages/ServicesPage";
 
@@ -24,59 +28,70 @@ const homeRoute = createRoute({
   path: "/",
   component: HomePage,
 });
-
 const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/about",
   component: AboutPage,
 });
-
 const servicesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/services",
   component: ServicesPage,
 });
-
 const contactRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/contact",
   component: ContactPage,
 });
-
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   component: CustomerLogin,
 });
-
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
   component: CustomerDashboard,
 });
-
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
   component: LoanApplicationPage,
 });
-
 const adminLoginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/login",
   component: AdminLogin,
 });
-
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin",
   component: AdminDashboard,
 });
-
 const sanctionLetterRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sanction-letter",
   component: SanctionLetterPage,
+});
+const crmRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/crm",
+  component: CRMDashboard,
+});
+const bmRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/bm",
+  component: BMDashboard,
+});
+const adminWorkflowRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/workflow",
+  component: AdminWorkflowDashboard,
+});
+const opsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/operations",
+  component: OperationsDashboard,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -90,6 +105,10 @@ const routeTree = rootRoute.addChildren([
   adminLoginRoute,
   adminRoute,
   sanctionLetterRoute,
+  crmRoute,
+  bmRoute,
+  adminWorkflowRoute,
+  opsRoute,
 ]);
 
 export const router = createRouter({
